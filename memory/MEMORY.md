@@ -11,3 +11,7 @@ Fakta a rozhodnutí, která musí přežít mezi konverzacemi. Co tu není zapsa
 - Projekt žije v `~/Desktop/prezentace-saas/`, git od první minuty.
 - Referenční vzor výsledné prezentace: Otínská (`~/Desktop/index.html`, podklady dle `~/Desktop/OTINSKA_podklady_cesty.md`).
 - Start se 3 checky (security, performance, ux), ne 15 — rostou s produktem.
+
+## Technická poznámka (prostředí Cowork)
+
+- Sandbox v Cowork neumí mazat gitové `.lock` soubory na Desktopu → po každé git operaci zůstane stale `index.lock`. Řešení: přesunout ho stranou souborovým nástrojem (move na `*.stale`) před další git operací. V Claude Code (nativně) tento problém nebude.
