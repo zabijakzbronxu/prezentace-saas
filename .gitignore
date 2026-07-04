@@ -1,5 +1,8 @@
 .env
 .env.*
+# ...ale šablony bez tajných klíčů verzovat chceme:
+!.env.example
+!.env.local.example
 node_modules/
 .next/
 dist/

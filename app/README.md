@@ -6,6 +6,10 @@ Základní Next.js aplikace (App Router, TypeScript). Zatím obsahuje jednoducho
 Technika záměrně bez `next/font/google` — používají se **systémové fonty**, aby
 build fungoval i bez internetu.
 
+Přihlašování uživatelů (registrace / přihlášení / odhlášení) je připravené přes
+**Supabase Auth** — viz sekce „Zapnutí přihlašování" níže. Dokud nevyplníš klíče,
+aplikace normálně běží, jen přihlašování je vypnuté (nic se nerozbije).
+
 ---
 
 ## Spuštění na vlastním počítači (pro kontrolu)
@@ -105,3 +109,50 @@ Hotovo. Od teď: každý `git push` do hlavní větve = automatický nový deplo
 
 Záměrně tu **není** — standardní Next.js aplikaci Vercel pozná sám. Jediné, co je
 potřeba nastavit ručně, je **Root Directory = `app`** (krok 4 výše).
+
+---
+
+## Zapnutí přihlašování (Supabase) — dělá Karel
+
+Registrace a přihlašování jsou v kódu hotové, jen potřebují napojení na Supabase
+(bezplatný účet). Bez těchto klíčů web běží dál, jen je přihlašování vypnuté.
+
+### Krok za krokem
+
+1. Jdi na **https://supabase.com** a přihlas se (můžeš přes GitHub).
+2. Klikni **New project**. Zadej název (např. `prodej-si-sam`), vyber heslo do
+   databáze (ulož si ho) a region **Europe**. Klikni **Create new project** a
+   počkej ~1–2 min, než se projekt založí.
+3. Vlevo klikni na **Project Settings** (ozubené kolo) → **Data API**. Zkopíruj
+   **Project URL** (např. `https://abcd1234.supabase.co`).
+4. Tamtéž → **API Keys**. Zkopíruj **anon public** klíč (dlouhý řetězec).
+5. Ve složce `app/` udělej kopii souboru `.env.local.example` a pojmenuj ji
+   **`.env.local`**. Vlož do ní obě hodnoty:
+
+   ```
+   NEXT_PUBLIC_SUPABASE_URL=https://abcd1234.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=sem-vloz-anon-public-klic
+   ```
+
+   > `.env.local` se **nikdy** nenahrává na GitHub (je v `.gitignore`). Klíče drž
+   > v tajnosti.
+6. **Pro testování bez e-mailů (doporučeno na začátek):** v Supabase jdi na
+   **Authentication → Sign In / Providers → Email** a *dočasně vypni* „Confirm
+   email". Pak se dá registrovat a hned přihlásit bez klikání na potvrzovací
+   e-mail. (Až půjdeme do ostrého provozu, potvrzování zase zapneme.)
+7. Restartuj lokální server (`npm run dev`) a otevři **http://localhost:3000** →
+   klikni **Přihlášení / Registrace**.
+
+### Ověření (co má fungovat)
+
+- Na `/login` se **zaregistruješ** (e-mail + heslo, min. 6 znaků).
+- **Přihlásíš se** → přesměruje tě to na `/account`, kde vidíš svůj e-mail.
+- Klikneš **Odhlásit se** → vrátí tě to na `/login`.
+
+### Pro nasazení na Vercel
+
+Stejné dvě proměnné (`NEXT_PUBLIC_SUPABASE_URL` a `NEXT_PUBLIC_SUPABASE_ANON_KEY`)
+zadáš ve Vercelu v **Project → Settings → Environment Variables**. Pak
+**Redeploy**. Do Supabase ještě přidej veřejnou Vercel adresu do
+**Authentication → URL Configuration** (Site URL a Redirect URLs), aby seděly
+odkazy z e-mailů.

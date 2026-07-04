@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Home() {
   return (
     <main
@@ -37,6 +39,16 @@ export default function Home() {
         Základní aplikace běží. Tady vznikne SaaS, kde si každý sám vytvoří
         prodejní prezentaci své nemovitosti.
       </p>
+      <Link
+        href="/login"
+        style={{
+          marginTop: "2rem",
+          color: "var(--accent)",
+          fontWeight: 600,
+        }}
+      >
+        Přihlášení / Registrace →
+      </Link>
     </main>
   );
 }
