@@ -37,9 +37,12 @@ Majitel nemovitosti dnes nemá jednoduchý způsob, jak svůj dům prezentovat d
 - **Naprosto spolehlivé** — veřejná prezentace nesmí nikdy spadnout; je to výkladní skříň prodeje domu.
 - **Platby bez chyb** — viz RULES.md, sekce Platby.
 
+## Cenový model (rozhodnuto 2026-07-04)
+
+**Platba předem.** Uživatel platí jednorázově před publikací prezentace — bez zaplacení se prezentace nezveřejní. Detaily (cena, případný náhled zdarma před zaplacením) upřesníme před vývojem platební části.
+
 ## Otevřené otázky
 
-- [ ] Cenový model (jednorázově / předplatné / free tier?)
 - [ ] Název a doména produktu
 - [ ] Tech stack (navrhne se v první vývojové konverzaci, Karel schválí)
 - [ ] Kolik šablon vzhledu v MVP (návrh: 1 — ta z Otínské)

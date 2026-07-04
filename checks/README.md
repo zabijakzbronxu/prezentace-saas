@@ -21,3 +21,7 @@ Každý check je samostatný „revizor" s úzkým zaměřením. Spouští se po
 | `dobrou noc` | `dobrou-noc.md` | večerní uzávěrka |
 
 Další checky (test, refactor, dependency, resilience, language, customers, logical…) doplníme, až poroste produkt — pravidelnost > dokonalost.
+
+## Budoucí rozšíření (až existuje kód)
+
+Automatizované doplňky checků: bezpečnostní scan závislostí (npm audit), testovací sada spouštěná před releasem, linting/formátování, měření výkonu. A před prvními produkčními daty: plán zálohování + pravidelná zkouška obnovy (viz RULES.md).

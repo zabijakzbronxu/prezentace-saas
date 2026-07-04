@@ -11,7 +11,9 @@
 - [ ] Karel schválí ústavu a vizi
 
 ## Fáze 1 — příprava vývoje (další konverzace)
-- [ ] Rozhodnout otevřené otázky z PRODUCT.md (cenový model, název, šablony)
+- [x] Cenový model: platba předem (rozhodnuto 2026-07-04)
+- [ ] Rozhodnout zbylé otevřené otázky z PRODUCT.md (název, doména, šablony, přesná cena)
+- [ ] Sepsat plán zálohování a obnovy (před prvními produkčními daty)
 - [ ] Návrh tech stacku (Claude navrhne, Karel schválí)
 - [ ] Rozpad MVP na malé úkoly → ClickUp
 

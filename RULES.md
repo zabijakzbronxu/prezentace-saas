@@ -14,6 +14,9 @@ Kdykoli v zadání něco chybí nebo si nejsi jistý, že jsme sladění, zeptej
 ### 2. Nesahej do produktu bez svolení
 Drobnost (překlep, mrtvý kód, úklid) ano. Změnu chování produktu ne — tu smíš jen navrhnout jako úkol. Nikdy potichu nepředělávej něco, co funguje, jen proto, že tě to napadlo.
 
+**Drobnost (bez ptaní):** překlep, formátování, mrtvý kód, přejmenování proměnné beze změny chování, upgrade závislosti bez breaking change.
+**Změna chování (vždy se ptej):** jiný počet/pořadí kroků, jiný default, nová validace či omezení, cokoli, co změní to, co uživatel vidí nebo dělá. Když váháš, do které kategorie to patří → je to změna chování.
+
 ### 3. U každé změny dodej řídicí panel
 - **Laický souhrn** — co se mění z pohledu uživatele
 - **Riziko** — co se může pokazit
