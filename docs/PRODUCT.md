@@ -1,5 +1,7 @@
 # PRODUCT.md — vize produktu
 
+**Pracovní název: „Prodej si sám"** · Tech stack: Next.js + Supabase + Vercel + Stripe (rozhodnuto 2026-07-04)
+
 ## Co stavíme
 
 SaaS, kde si **kdokoli sám vytvoří prodejní prezentaci své nemovitosti** — krásnou samostatnou webovou stránku, jakou majitelé domů běžně nemají a realitky ji dělají draho nebo vůbec.
@@ -43,6 +45,6 @@ Majitel nemovitosti dnes nemá jednoduchý způsob, jak svůj dům prezentovat d
 
 ## Otevřené otázky
 
-- [ ] Název a doména produktu
-- [ ] Tech stack (navrhne se v první vývojové konverzaci, Karel schválí)
+- [ ] Finální název a doména (před spuštěním; pracovně „Prodej si sám")
+- [ ] Přesná cena a zda je náhled zdarma před zaplacením
 - [ ] Kolik šablon vzhledu v MVP (návrh: 1 — ta z Otínské)
