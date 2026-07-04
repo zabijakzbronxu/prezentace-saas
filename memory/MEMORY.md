@@ -5,7 +5,7 @@ Fakta a rozhodnutí, která musí přežít mezi konverzacemi. Co tu není zapsa
 ## Rozhodnutí (2026-07-04, založení projektu)
 
 - Systém práce kopírujeme 1:1 podle článku M. Uďana (6 pilířů: pravidla, zadávání, kontroly, záchranné sítě, bezpečná půda, provoz a paměť).
-- Úkoly a backlog: **ClickUp** (proč: 1:1 kopie článku, Karlova volba; do připojení konektoru fallback `tasks/todo.md`).
+- Úkoly a backlog: **ClickUp** (proč: 1:1 kopie článku, Karlova volba). Připojeno 2026-07-04, seznam „Prezentace SaaS — Backlog" (list_id 901219290922). `tasks/todo.md` zůstává jen jako pracovní plán session.
 - Platební brána: **Stripe** (proč: nejlepší dokumentace a nejsnazší integrace pro AI vývoj, funguje v ČR).
 - **Cenový model: platba předem** — prezentace se nezveřejní bez zaplacení (Karel, 2026-07-04).
 - Křížová kontrola: zatím **čerstvý Claude agent** jako nezávislý revizor (proč: Karel zatím nemá OpenAI předplatné); Codex doplníme později.

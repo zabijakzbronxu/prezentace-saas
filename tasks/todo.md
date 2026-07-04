@@ -7,7 +7,7 @@
 - [x] CLAUDE.md + RULES.md (ústava)
 - [x] 3 checky + mega check + dobrou noc
 - [x] PRODUCT.md (vize)
-- [ ] Připojit ClickUp konektor (čeká na Karla)
+- [x] Připojit ClickUp konektor — backlog žije v seznamu „Prezentace SaaS — Backlog"
 - [ ] Karel schválí ústavu a vizi
 
 ## Fáze 1 — příprava vývoje (další konverzace)
