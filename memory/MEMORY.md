@@ -1,0 +1,13 @@
+# MEMORY.md — trvalá paměť projektu
+
+Fakta a rozhodnutí, která musí přežít mezi konverzacemi. Co tu není zapsané, zítra neexistuje.
+
+## Rozhodnutí (2026-07-04, založení projektu)
+
+- Systém práce kopírujeme 1:1 podle článku M. Uďana (6 pilířů: pravidla, zadávání, kontroly, záchranné sítě, bezpečná půda, provoz a paměť).
+- Úkoly a backlog: **ClickUp** (konektor se připojuje; do té doby `tasks/todo.md`).
+- Platební brána: **Stripe**.
+- Křížová kontrola: zatím **čerstvý Claude agent** jako nezávislý revizor; OpenAI Codex doplníme později.
+- Projekt žije v `~/Desktop/prezentace-saas/`, git od první minuty.
+- Referenční vzor výsledné prezentace: Otínská (`~/Desktop/index.html`, podklady dle `~/Desktop/OTINSKA_podklady_cesty.md`).
+- Start se 3 checky (security, performance, ux), ne 15 — rostou s produktem.
