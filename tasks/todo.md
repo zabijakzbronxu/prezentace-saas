@@ -10,12 +10,16 @@
 - [x] Připojit ClickUp konektor — backlog žije v seznamu „Prezentace SaaS — Backlog"
 - [ ] Karel schválí ústavu a vizi
 
-## Fáze 1 — příprava vývoje (další konverzace)
+## Fáze 1 — příprava vývoje
 - [x] Cenový model: platba předem (rozhodnuto 2026-07-04)
-- [ ] Rozhodnout zbylé otevřené otázky z PRODUCT.md (název, doména, šablony, přesná cena)
-- [ ] Sepsat plán zálohování a obnovy (před prvními produkčními daty)
-- [ ] Návrh tech stacku (Claude navrhne, Karel schválí)
-- [ ] Rozpad MVP na malé úkoly → ClickUp
+- [x] Tech stack: varianta A — Next.js + Supabase + Vercel + Stripe
+- [x] Pracovní název: „Prodej si sám"
+- [x] Rozpad MVP na 13 úkolů (E1.1–E4.13) → ClickUp
+- [ ] Sepsat plán zálohování a obnovy (v ClickUpu, před produkčními daty)
+- [ ] Finální název + doména (v ClickUpu, před spuštěním)
 
-## Review
-*(doplní se po dokončení fáze)*
+## Fáze 2 — vývoj MVP
+- [ ] Začít úkolem E1.1 (založení aplikace + Vercel) v ČISTÉ konverzaci
+
+## Review — fáze 0 a 1 (2026-07-04)
+Systém založen dle 6 pilířů, ověřen nezávislým agentem (bez rozporů). ClickUp připojen, backlog naplněn. Všechna rozhodnutí v memory/MEMORY.md. Poznámka: git v Cowork sandboxu nechává stale lock soubory — workaround v MEMORY.md.
