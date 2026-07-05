@@ -47,6 +47,7 @@ export interface Database {
           status: PresentationStatus;
           slug: string;
           title: string | null;
+          property_type: string | null;
           street: string | null;
           city: string | null;
           postal_code: string | null;
@@ -69,6 +70,7 @@ export interface Database {
           status?: PresentationStatus;
           slug: string;
           title?: string | null;
+          property_type?: string | null;
           street?: string | null;
           city?: string | null;
           postal_code?: string | null;

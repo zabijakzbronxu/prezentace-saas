@@ -44,6 +44,18 @@ export default async function AccountPage() {
       <p style={{ color: "var(--muted)" }}>
         Přihlášen jako <strong style={{ color: "var(--foreground)" }}>{user.email}</strong>
       </p>
+      <Link
+        href="/presentations"
+        style={{
+          padding: "0.7rem 1.3rem",
+          borderRadius: "8px",
+          background: "var(--accent)",
+          color: "#04263a",
+          fontWeight: 700,
+        }}
+      >
+        Moje prezentace →
+      </Link>
       <form action={signOut}>
         <button
           style={{
