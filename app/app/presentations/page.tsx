@@ -65,10 +65,25 @@ export default async function PresentationsPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: presentations } = await supabase
+  const { data: presentations, error: loadError } = await supabase
     .from("presentations")
     .select("id, title, street, city, price_czk, status, created_at")
     .order("created_at", { ascending: false });
+
+  // Chybu NEZAHAZUJEME: prázdný seznam ≠ chyba. Kdyby se to spolklo, maskovalo by to
+  // rozbité RLS/migraci/chybějící profil. Zaloguj na server a ukaž bezpečnou hlášku.
+  if (loadError) {
+    console.error("[presentations] načtení selhalo:", loadError.message);
+    return (
+      <main style={{ ...wrap, justifyContent: "center", textAlign: "center", gap: "1rem" }}>
+        <h1 style={{ fontSize: "1.6rem", fontWeight: 700 }}>Moje prezentace</h1>
+        <p style={{ color: "#fca5a5", maxWidth: "28rem" }}>
+          Nepodařilo se načíst prezentace. Zkus to prosím za chvíli znovu.
+        </p>
+        <Link href="/account" style={{ color: "var(--muted)" }}>← zpět na účet</Link>
+      </main>
+    );
+  }
 
   const list = presentations ?? [];
 
