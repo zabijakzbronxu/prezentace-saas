@@ -57,6 +57,8 @@ export interface Database {
           land_area_m2: number | null;
           energy_class: string | null;
           description: string | null;
+          location_text: string | null;
+          features_text: string | null;
           contact_name: string | null;
           contact_email: string | null;
           contact_phone: string | null;
@@ -80,6 +82,8 @@ export interface Database {
           land_area_m2?: number | null;
           energy_class?: string | null;
           description?: string | null;
+          location_text?: string | null;
+          features_text?: string | null;
           contact_name?: string | null;
           contact_email?: string | null;
           contact_phone?: string | null;
