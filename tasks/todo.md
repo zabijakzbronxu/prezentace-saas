@@ -21,5 +21,15 @@
 ## Fáze 2 — vývoj MVP
 - [ ] Začít úkolem E1.1 (založení aplikace + Vercel) v ČISTÉ konverzaci
 
+## Křížová revize (Codex) — oprava nálezů (2026-07-05)
+- [x] HIGH: open redirect v `auth/confirm` — jen interní cesty, fallback `/account`
+- [x] HIGH: DB pojistka „bez zaplacení nezveřejníš" — trigger `enforce_paid_before_publish`
+- [x] MEDIUM: serverová validace formuláře prezentace (délky, energy A–G, rozsahy, parsování čísel)
+- [x] MEDIUM: DB CHECK omezení (cena, plochy, energy, délky) — nová migrace
+- [x] MEDIUM: seznam prezentací nezahazuje `error` — log + bezpečná hláška
+- [x] MEDIUM: sjednocení Next 16.2.10 — build ověřen v čisté kopii
+- [x] LOW: `*.tsbuildinfo` do `.gitignore`
+- 5 commitů pod autorem Karel, NEpushnuto. Migraci a `npm ci` spustí Karel (viz shrnutí v chatu).
+
 ## Review — fáze 0 a 1 (2026-07-04)
 Systém založen dle 6 pilířů, ověřen nezávislým agentem (bez rozporů). ClickUp připojen, backlog naplněn. Všechna rozhodnutí v memory/MEMORY.md. Poznámka: git v Cowork sandboxu nechává stale lock soubory — workaround v MEMORY.md.
