@@ -27,6 +27,7 @@
 - [x] E2.5 fotky: `/presentations/[id]/photos` — nahrávání z prohlížeče rovnou do Storage (privátní bucket `presentation-photos`), hero, pořadí, mazání, limity (8 MB, JPEG/PNG/WebP, max 20)
 - [x] E2.6 texty: `/presentations/[id]/texts` — titulek, popis/příběh, lokalita, vybavení; migrace `20260706100000_text_sections.sql` (ověřena parserem)
 - [x] Průvodce: kroky Základ → Fotky → Texty, po založení se pokračuje na Fotky
+- [x] Veřejná stránka prezentace `/listing/[slug]` (hero, galerie, texty, parametry, kontakt/CTA) — publikovaná veřejně, koncept jen vlastníkovi přes „Náhled ↗" v průvodci; RLS beze změn
 - [x] `npm run build` ověřen v čisté kopii (na mountu je rozbité node_modules → Karel spustí `npm ci`)
 - [ ] Karel: kroky dle `tasks/kroky-pro-karla.md` (npm ci, migrace, bucket, ověření, push)
 - [ ] ClickUp: konektor v session nedostupný — E2.5/E2.6 přepnout ručně (viz kroky pro Karla)
