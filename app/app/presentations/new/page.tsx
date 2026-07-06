@@ -2,48 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { createPresentation } from "./actions";
+import { wrap, card, label, hint, input, row, primaryBtn, ErrorBox } from "../ui";
 
 export const dynamic = "force-dynamic";
-
-const wrap: React.CSSProperties = {
-  minHeight: "100vh",
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  padding: "3rem 1.5rem",
-};
-
-const card: React.CSSProperties = {
-  width: "38rem",
-  maxWidth: "100%",
-  display: "flex",
-  flexDirection: "column",
-  gap: "1.25rem",
-};
-
-const label: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "0.35rem",
-  fontSize: "0.95rem",
-};
-
-const hint: React.CSSProperties = { color: "var(--muted)", fontSize: "0.8rem" };
-
-const input: React.CSSProperties = {
-  padding: "0.65rem 0.85rem",
-  borderRadius: "8px",
-  border: "1px solid #334155",
-  background: "#0f172a",
-  color: "var(--foreground)",
-  fontSize: "1rem",
-};
-
-const row: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr 1fr",
-  gap: "1rem",
-};
 
 export default async function NewPresentationPage({
   searchParams,
@@ -82,19 +43,7 @@ export default async function NewPresentationPage({
           </p>
         </div>
 
-        {error ? (
-          <p
-            style={{
-              color: "#fca5a5",
-              background: "rgba(248,113,113,0.1)",
-              border: "1px solid rgba(248,113,113,0.3)",
-              borderRadius: "8px",
-              padding: "0.7rem 0.9rem",
-            }}
-          >
-            {error}
-          </p>
-        ) : null}
+        {error ? <ErrorBox>{error}</ErrorBox> : null}
 
         <form action={createPresentation} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
           <label style={label}>
@@ -181,19 +130,7 @@ export default async function NewPresentationPage({
           </label>
 
           <div style={{ display: "flex", gap: "1rem", alignItems: "center", marginTop: "0.5rem" }}>
-            <button
-              type="submit"
-              style={{
-                padding: "0.75rem 1.4rem",
-                borderRadius: "8px",
-                border: "none",
-                background: "var(--accent)",
-                color: "#04263a",
-                fontWeight: 700,
-                fontSize: "1rem",
-                cursor: "pointer",
-              }}
-            >
+            <button type="submit" style={primaryBtn}>
               Uložit a pokračovat
             </button>
             <Link href="/presentations" style={{ color: "var(--muted)" }}>
