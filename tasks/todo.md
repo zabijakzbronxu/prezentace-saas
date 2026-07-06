@@ -33,6 +33,7 @@
 - [x] `npm run build` ověřen v čisté kopii (na mountu je rozbité node_modules → Karel spustí `npm ci`)
 - [ ] Karel: kroky dle `tasks/kroky-pro-karla.md` (npm ci, migrace, bucket, ověření, push)
 - [x] ClickUp aktualizován (konektor naskočil v průběhu session): E2.5, E2.6, E2.7 i E2.8 na „in progress" + komentáře co je hotové a co zbývá
+- [ ] ClickUp: doplnit komentáře k dokončení E2.6 (kontakt) a E2.7 (světlá šablona) — při zápisu odpoledne měl ClickUp výpadek (503); text komentářů = souhrn v chatu 2026-07-06
 - NEpushnuto (push je vědomý krok Karla).
 
 ## Křížová revize (Codex) — oprava nálezů (2026-07-05)
