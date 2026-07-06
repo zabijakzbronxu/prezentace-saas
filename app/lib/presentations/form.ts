@@ -37,6 +37,9 @@ export const MAX = {
   description: 5000,
   location_text: 5000,
   features_text: 5000,
+  contact_name: 120,
+  contact_email: 200,
+  contact_phone: 30,
   price_czk: 10_000_000_000, // 10 mld Kč — horní rozumná mez
   area_m2: 1_000_000, // m²
 } as const;
@@ -140,6 +143,61 @@ export function parseBasicFields(formData: FormData): ParseResult<BasicFields> {
       land_area_m2,
     },
   };
+}
+
+/** Kontaktní údaje prodávajícího po validaci (krok 3 průvodce). Vše volitelné. */
+export type ContactFields = {
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+};
+
+/**
+ * Přečte a zvaliduje kontakt z formuláře. Všechna pole jsou volitelná,
+ * ale když jsou vyplněná, musí dávat smysl (formát e-mailu a telefonu, délky).
+ */
+export function parseContactFields(formData: FormData): ParseResult<ContactFields> {
+  const contact_name = text(formData, "contact_name");
+  const contact_email = text(formData, "contact_email");
+  const contact_phone = text(formData, "contact_phone");
+
+  if (contact_name && contact_name.length > MAX.contact_name) {
+    return {
+      ok: false,
+      message: `Kontaktní jméno je moc dlouhé (max ${MAX.contact_name} znaků).`,
+    };
+  }
+
+  if (contact_email) {
+    if (contact_email.length > MAX.contact_email) {
+      return {
+        ok: false,
+        message: `E-mail je moc dlouhý (max ${MAX.contact_email} znaků).`,
+      };
+    }
+    // Záměrně jen základní tvar „něco@něco.něco" — přísnější kontrola víc škodí, než pomáhá.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact_email)) {
+      return { ok: false, message: "E-mail nevypadá správně — zkontroluj ho prosím." };
+    }
+  }
+
+  if (contact_phone) {
+    if (contact_phone.length > MAX.contact_phone) {
+      return {
+        ok: false,
+        message: `Telefon je moc dlouhý (max ${MAX.contact_phone} znaků).`,
+      };
+    }
+    const digits = contact_phone.replace(/\D/g, "");
+    if (digits.length < 6 || !/^[+]?[\d\s()/.-]+$/.test(contact_phone)) {
+      return {
+        ok: false,
+        message: "Telefon nevypadá správně — použij číslice, případně mezery a +420.",
+      };
+    }
+  }
+
+  return { ok: true, values: { contact_name, contact_email, contact_phone } };
 }
 
 /** Je řetězec platné UUID? (pojistka, než s ID půjdeme do DB nebo do URL) */
