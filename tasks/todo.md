@@ -28,6 +28,8 @@
 - [x] E2.6 texty: `/presentations/[id]/texts` — titulek, popis/příběh, lokalita, vybavení; migrace `20260706100000_text_sections.sql` (ověřena parserem)
 - [x] Průvodce: kroky Základ → Fotky → Texty, po založení se pokračuje na Fotky
 - [x] Veřejná stránka prezentace `/listing/[slug]` (hero, galerie, texty, parametry, kontakt/CTA) — publikovaná veřejně, koncept jen vlastníkovi přes „Náhled ↗" v průvodci; RLS beze změn
+- [x] Kontakt v průvodci (dokončení E2.6): jméno/telefon/e-mail v kroku 3, validace formátů, migrace `20260706150000_contact_checks.sql` (ověřena parserem), CTA Zavolat / Napsat e-mail na veřejné stránce
+- [x] E2.7 světlá šablona veřejné stránky: Playfair Display + Work Sans (next/font), bílé pozadí, vzdušná typografie dle Otínské; adresa `/listing/<slug>` potvrzena jako finální
 - [x] `npm run build` ověřen v čisté kopii (na mountu je rozbité node_modules → Karel spustí `npm ci`)
 - [ ] Karel: kroky dle `tasks/kroky-pro-karla.md` (npm ci, migrace, bucket, ověření, push)
 - [x] ClickUp aktualizován (konektor naskočil v průběhu session): E2.5, E2.6, E2.7 i E2.8 na „in progress" + komentáře co je hotové a co zbývá

@@ -28,14 +28,17 @@ npm run build
 `npm run build` musí skončit bez chyby (my jsme ho ověřili v čisté kopii —
 u tebe po `npm ci` projde taky).
 
-## 2. Spustit novou migraci databáze (2 minuty)
+## 2. Spustit dvě nové migrace databáze (3 minuty)
 
-Přibyly dva textové sloupce („Lokalita a okolí", „Vybavení a přednosti").
+Přibyly dva textové sloupce („Lokalita a okolí", „Vybavení a přednosti")
+a pojistka délek u kontaktních údajů.
 
 1. `supabase.com/dashboard` → tvůj projekt → **SQL Editor** → **New query**
 2. Zkopíruj celý obsah souboru
    `app/supabase/migrations/20260706100000_text_sections.sql` a spusť (**Run**).
-3. Musí skončit **Success**. Jde spustit i dvakrát, nic se nerozbije.
+3. Stejně pak spusť i
+   `app/supabase/migrations/20260706150000_contact_checks.sql`.
+4. Obě musí skončit **Success**. Jdou spustit i dvakrát, nic se nerozbije.
 
 ## 3. Zapnout úložiště fotek (5 minut)
 
@@ -59,6 +62,12 @@ pravidla. Bez tohohle kroku fotky nepůjdou nahrát (aplikace to řekne hláško
    **Náhled ↗** — otevře se stránka, jak ji uvidí zájemce, s modrým pruhem
    „Náhled konceptu — tuhle stránku vidíš jen ty". Prázdné sekce mají
    v náhledu odkaz „Doplnit…"; na veřejné stránce se prostě nezobrazí.
+   Stránka je nově **světlá** (bílé pozadí, serifové nadpisy) — průvodce
+   a účet zůstávají tmavé, to je záměr.
+7. **Kontakt:** v kroku **3. Texty** dole vyplň jméno, telefon a e-mail →
+   ulož → v Náhledu se dole objeví karta „Zaujalo vás to tu?" s tlačítky
+   **Zavolat** a **Napsat e-mail** (tlačítka zkus — musí otevřít volání /
+   nový e-mail). Když kontakt smažeš, sekce ze stránky zmizí.
 7. **Kontrola soukromí konceptu:** zkopíruj adresu náhledu
    (`/listing/…`) a otevři ji v anonymním okně — musí se ukázat
    „Prezentace není dostupná". Koncept bez přihlášení nikdo neuvidí.
@@ -94,9 +103,13 @@ kontakt v průvodci, doladění šablony podle Otínské, tlačítko Publikovat)
 3. **První nahraná fotka se automaticky stane hlavní** (jde kdykoli změnit). OK?
 4. **Po založení prezentace pokračuje průvodce rovnou na Fotky** (dřív skočil
    na seznam). OK?
-5. **Adresa veřejné stránky je `/listing/<slug>`** (zadání znělo na tuhle
-   cestu; starší poznámky v dokumentech zmiňovaly `/p/<slug>`). Přejmenování
-   je snadné, ale rozhodni před spuštěním — pak už adresu neměnit.
-6. **Kontakt na veřejné stránce:** údaje (jméno, telefon, e-mail) zatím
-   nejdou v průvodci vyplnit — formulář pro ně je další úkol. V náhledu
-   na to stránka upozorní, na veřejné stránce se sekce zatím nezobrazí.
+5. ~~Adresa veřejné stránky~~ — **rozhodnuto 2026-07-06: zůstává
+   `/listing/<slug>`.**
+6. ~~Kontakt na veřejné stránce~~ — **hotovo 2026-07-06:** kontakt se
+   vyplňuje v kroku 3 (Texty), na veřejné stránce dělá tlačítka
+   Zavolat / Napsat e-mail.
+7. **Vzhled veřejné šablony:** světlá, serifové nadpisy (Playfair Display
+   + Work Sans, podle referenční Otínské). Mrkni na Náhled — kdyby ti barvy
+   či písmo neseděly, řekni a doladíme.
+8. **Limity kontaktu:** jméno max 120, e-mail max 200, telefon max 30 znaků,
+   telefon musí mít aspoň 6 číslic. OK?

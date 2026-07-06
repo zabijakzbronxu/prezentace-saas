@@ -21,8 +21,9 @@ Fakta a rozhodnutí, která musí přežít mezi konverzacemi. Co tu není zapsa
 - Limity fotek: max 20 na prezentaci, 8 MB na soubor, jen JPEG/PNG/WebP (typ se pozná podle obsahu, ne přípony). První nahraná fotka se stane hlavní (hero).
 - Textové sekce prezentace: titulek, popis/příběh (`description`), „Lokalita a okolí" (`location_text`), „Vybavení a přednosti" (`features_text`) — migrace `20260706100000_text_sections.sql`.
 - Průvodce: Základ → Fotky → Texty; po založení prezentace se pokračuje rovnou na Fotky.
-- Veřejná stránka prezentace: **`/listing/<slug>`** (dle zadání Karla 2026-07-06; starší poznámky zmiňovaly `/p/<slug>` — před spuštěním potvrdit finální tvar adresy). Přístup řeší čistě RLS: publikovaná = veřejná, koncept = jen vlastník („Náhled ↗" v průvodci). Prázdné sekce: v náhledu vlídný prázdný stav s odkazem, na veřejné stránce se vynechají.
-- Kontaktní údaje prodávajícího zatím nejdou vyplnit (sloupce v DB jsou, formulář chybí) — samostatný budoucí úkol.
+- Veřejná stránka prezentace: **`/listing/<slug>` — ROZHODNUTO (Karel, 2026-07-06), adresa se už nemění.** Přístup řeší čistě RLS: publikovaná = veřejná, koncept = jen vlastník („Náhled ↗" v průvodci). Prázdné sekce: v náhledu vlídný prázdný stav s odkazem, na veřejné stránce se vynechají.
+- Vzhled veřejné šablony (E2.7): **světlá** — bílé pozadí, serifové nadpisy Playfair Display + text Work Sans (dle referenční Otínské), fonty přes next/font (balí se při buildu, žádné stahování za běhu). Admin/průvodce zůstává tmavý — záměr, dvě různé identity.
+- Kontakt prodávajícího (dokončení E2.6): vyplňuje se v kroku 3 (Texty), volitelný; validace: e-mail základní tvar, telefon ≥ 6 číslic, délky 120/200/30 (+ DB CHECK `20260706150000_contact_checks.sql`). Na veřejné stránce karta s CTA Zavolat / Napsat e-mail; bez kontaktu se sekce skryje.
 - ClickUp konektor nebyl v session 2026-07-06 dostupný → stav E2.5/E2.6 v backlogu aktualizuje Karel ručně (viz `tasks/kroky-pro-karla.md`).
 
 ## Technická poznámka (prostředí Cowork)
