@@ -14,6 +14,7 @@ import {
   ErrorBox,
   SuccessBox,
   WizardNav,
+  PreviewLink,
 } from "../../ui";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +40,7 @@ export default async function PresentationTextsPage({
 
   const { data: p, error: loadError } = await supabase
     .from("presentations")
-    .select("id, title, street, city, description, location_text, features_text")
+    .select("id, slug, title, street, city, description, location_text, features_text")
     .eq("id", id)
     .maybeSingle();
 
@@ -64,7 +65,18 @@ export default async function PresentationTextsPage({
     <main style={wrap}>
       <div style={card}>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          <WizardNav presentationId={p.id} current="texts" />
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "0.75rem",
+              flexWrap: "wrap",
+            }}
+          >
+            <WizardNav presentationId={p.id} current="texts" />
+            <PreviewLink slug={p.slug} />
+          </div>
           <h1 style={{ fontSize: "1.7rem", fontWeight: 700 }}>
             {p.title || [p.street, p.city].filter(Boolean).join(", ") || "Prezentace"}
           </h1>

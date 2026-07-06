@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { isUuid } from "@/lib/presentations/form";
 import { PHOTOS_BUCKET } from "@/lib/photos";
-import { wrap, card, smallBtn, ErrorBox, SuccessBox, WizardNav } from "../../ui";
+import { wrap, card, smallBtn, ErrorBox, SuccessBox, WizardNav, PreviewLink } from "../../ui";
 import { ConfirmSubmit } from "../../confirm-submit";
 import { PhotoUploader } from "./uploader";
 import { deletePhoto, movePhoto, setHeroPhoto } from "./actions";
@@ -31,7 +31,7 @@ export default async function PresentationPhotosPage({
 
   const { data: p, error: loadError } = await supabase
     .from("presentations")
-    .select("id, title, street, city")
+    .select("id, slug, title, street, city")
     .eq("id", id)
     .maybeSingle();
 
@@ -90,7 +90,18 @@ export default async function PresentationPhotosPage({
     <main style={wrap}>
       <div style={{ ...card, width: "44rem" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-          <WizardNav presentationId={p.id} current="photos" />
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "0.75rem",
+              flexWrap: "wrap",
+            }}
+          >
+            <WizardNav presentationId={p.id} current="photos" />
+            <PreviewLink slug={p.slug} />
+          </div>
           <h1 style={{ fontSize: "1.7rem", fontWeight: 700 }}>
             {p.title || [p.street, p.city].filter(Boolean).join(", ") || "Prezentace"}
           </h1>

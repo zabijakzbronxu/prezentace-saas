@@ -106,6 +106,28 @@ export function SuccessBox({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** Odkaz „Náhled" — otevře veřejnou stránku prezentace v nové záložce.
+ *  U konceptu ji vidí jen vlastník (hlídá RLS), takže je bezpečný v každém kroku. */
+export function PreviewLink({ slug }: { slug: string }) {
+  return (
+    <Link
+      href={`/listing/${slug}`}
+      target="_blank"
+      style={{
+        fontSize: "0.85rem",
+        fontWeight: 600,
+        color: "var(--accent)",
+        border: "1px solid var(--accent)",
+        borderRadius: "8px",
+        padding: "0.35rem 0.8rem",
+        whiteSpace: "nowrap",
+      }}
+    >
+      Náhled ↗
+    </Link>
+  );
+}
+
 const STEPS = [
   { key: "edit", n: 1, title: "Základ" },
   { key: "photos", n: 2, title: "Fotky" },
