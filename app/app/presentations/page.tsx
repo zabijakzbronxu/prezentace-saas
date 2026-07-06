@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
+import { formatPrice } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -36,11 +37,6 @@ const primaryBtn: React.CSSProperties = {
   border: "none",
   display: "inline-block",
 };
-
-function formatPrice(v: number | null): string {
-  if (v === null) return "cena neuvedena";
-  return new Intl.NumberFormat("cs-CZ").format(v) + " Kč";
-}
 
 export default async function PresentationsPage({
   searchParams,
