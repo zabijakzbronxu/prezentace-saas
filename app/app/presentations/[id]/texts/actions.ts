@@ -3,12 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { text, isUuid, MAX } from "@/lib/presentations/form";
+import { text, isUuid, MAX, parseContactFields } from "@/lib/presentations/form";
 
 /**
  * Krok 3 průvodce: uloží texty prezentace (titulek, popis/příběh,
- * lokalita a okolí, vybavení a přednosti). Serverová validace délek —
- * stejné limity hlídá i DB (CHECK omezení).
+ * lokalita a okolí, vybavení a přednosti) a kontakt prodávajícího.
+ * Serverová validace délek a formátů — délky hlídá i DB (CHECK omezení).
  */
 export async function updateTexts(formData: FormData) {
   const supabase = await createClient();
@@ -45,9 +45,14 @@ export async function updateTexts(formData: FormData) {
     }
   }
 
+  const contact = parseContactFields(formData);
+  if (!contact.ok) {
+    redirect(`/presentations/${id}/texts?error=${encodeURIComponent(contact.message)}`);
+  }
+
   const { data, error } = await supabase
     .from("presentations")
-    .update({ title, description, location_text, features_text })
+    .update({ title, description, location_text, features_text, ...contact.values })
     .eq("id", id)
     .select("id")
     .single();

@@ -40,7 +40,9 @@ export default async function PresentationTextsPage({
 
   const { data: p, error: loadError } = await supabase
     .from("presentations")
-    .select("id, slug, title, street, city, description, location_text, features_text")
+    .select(
+      "id, slug, title, street, city, description, location_text, features_text, contact_name, contact_email, contact_phone",
+    )
     .eq("id", id)
     .maybeSingle();
 
@@ -81,9 +83,9 @@ export default async function PresentationTextsPage({
             {p.title || [p.street, p.city].filter(Boolean).join(", ") || "Prezentace"}
           </h1>
           <p style={{ color: "var(--muted)" }}>
-            Krok 3 · Texty. Piš, jako bys o bydlení vyprávěl(a) známým — co se vám tu
-            žilo dobře, co je kolem, co kupující ocení. Všechno je nepovinné a jde
-            kdykoli doplnit.
+            Krok 3 · Texty a kontakt. Piš, jako bys o bydlení vyprávěl(a) známým — co
+            se vám tu žilo dobře, co je kolem, co kupující ocení. Všechno je nepovinné
+            a jde kdykoli doplnit.
           </p>
         </div>
 
@@ -156,9 +158,66 @@ export default async function PresentationTextsPage({
             </span>
           </label>
 
+          <div
+            style={{
+              borderTop: "1px solid #1e293b",
+              paddingTop: "1.25rem",
+              display: "flex",
+              flexDirection: "column",
+              gap: "1.25rem",
+            }}
+          >
+            <div>
+              <h2 style={{ fontSize: "1.15rem", fontWeight: 700 }}>Kontakt pro zájemce</h2>
+              <p style={{ ...hint, marginTop: "0.25rem" }}>
+                Zobrazí se na veřejné stránce s tlačítky „Zavolat" a „Napsat e-mail".
+                Dokud kontakt nevyplníš, sekce se zájemcům neukáže — a nemají se jak ozvat.
+              </p>
+            </div>
+
+            <label style={label}>
+              Jméno
+              <input
+                style={input}
+                type="text"
+                name="contact_name"
+                maxLength={MAX.contact_name}
+                placeholder="např. Karel Novák"
+                defaultValue={p.contact_name ?? ""}
+              />
+            </label>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+              <label style={label}>
+                Telefon
+                <input
+                  style={input}
+                  type="tel"
+                  name="contact_phone"
+                  maxLength={MAX.contact_phone}
+                  placeholder="např. +420 777 123 456"
+                  inputMode="tel"
+                  defaultValue={p.contact_phone ?? ""}
+                />
+              </label>
+              <label style={label}>
+                E-mail
+                <input
+                  style={input}
+                  type="email"
+                  name="contact_email"
+                  maxLength={MAX.contact_email}
+                  placeholder="např. karel@email.cz"
+                  inputMode="email"
+                  defaultValue={p.contact_email ?? ""}
+                />
+              </label>
+            </div>
+          </div>
+
           <div style={{ display: "flex", gap: "1rem", alignItems: "center", marginTop: "0.5rem" }}>
             <button type="submit" style={primaryBtn}>
-              Uložit texty
+              Uložit texty a kontakt
             </button>
             <Link href={`/presentations/${p.id}/photos`} style={{ color: "var(--muted)" }}>
               ← Fotky
