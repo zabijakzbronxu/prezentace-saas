@@ -21,6 +21,17 @@
 ## Fáze 2 — vývoj MVP
 - [ ] Začít úkolem E1.1 (založení aplikace + Vercel) v ČISTÉ konverzaci
 
+## Session 2026-07-06 — editace + E2.5 fotky + E2.6 texty
+- [x] Sdílená validace formuláře (založení i editace hlídají totéž) — `lib/presentations/form.ts`
+- [x] Editace prezentace: `/presentations/[id]/edit` (RLS jen vlastní), odkaz „Upravit" ze seznamu
+- [x] E2.5 fotky: `/presentations/[id]/photos` — nahrávání z prohlížeče rovnou do Storage (privátní bucket `presentation-photos`), hero, pořadí, mazání, limity (8 MB, JPEG/PNG/WebP, max 20)
+- [x] E2.6 texty: `/presentations/[id]/texts` — titulek, popis/příběh, lokalita, vybavení; migrace `20260706100000_text_sections.sql` (ověřena parserem)
+- [x] Průvodce: kroky Základ → Fotky → Texty, po založení se pokračuje na Fotky
+- [x] `npm run build` ověřen v čisté kopii (na mountu je rozbité node_modules → Karel spustí `npm ci`)
+- [ ] Karel: kroky dle `tasks/kroky-pro-karla.md` (npm ci, migrace, bucket, ověření, push)
+- [ ] ClickUp: konektor v session nedostupný — E2.5/E2.6 přepnout ručně (viz kroky pro Karla)
+- NEpushnuto (push je vědomý krok Karla).
+
 ## Křížová revize (Codex) — oprava nálezů (2026-07-05)
 - [x] HIGH: open redirect v `auth/confirm` — jen interní cesty, fallback `/account`
 - [x] HIGH: DB pojistka „bez zaplacení nezveřejníš" — trigger `enforce_paid_before_publish`

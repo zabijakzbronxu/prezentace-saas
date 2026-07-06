@@ -15,6 +15,14 @@ Fakta a rozhodnutí, která musí přežít mezi konverzacemi. Co tu není zapsa
 - Referenční vzor výsledné prezentace: Otínská (`~/Desktop/index.html`, podklady dle `~/Desktop/OTINSKA_podklady_cesty.md`).
 - Start se 3 checky (security, performance, ux), ne 15 — rostou s produktem.
 
+## Rozhodnutí (2026-07-06, editace + fotky + texty) — defaulty zvolené AI, čekají na potvrzení Karla
+
+- Fotky se nahrávají **z prohlížeče přímo do Supabase Storage** (přes server by Vercel limitoval ~4,5 MB na požadavek). Bucket `presentation-photos` je **privátní**; náhledy přes podepsané odkazy; veřejné čtení jen u publikovaných (Storage policies v `app/supabase/storage-setup.md`).
+- Limity fotek: max 20 na prezentaci, 8 MB na soubor, jen JPEG/PNG/WebP (typ se pozná podle obsahu, ne přípony). První nahraná fotka se stane hlavní (hero).
+- Textové sekce prezentace: titulek, popis/příběh (`description`), „Lokalita a okolí" (`location_text`), „Vybavení a přednosti" (`features_text`) — migrace `20260706100000_text_sections.sql`.
+- Průvodce: Základ → Fotky → Texty; po založení prezentace se pokračuje rovnou na Fotky.
+- ClickUp konektor nebyl v session 2026-07-06 dostupný → stav E2.5/E2.6 v backlogu aktualizuje Karel ručně (viz `tasks/kroky-pro-karla.md`).
+
 ## Technická poznámka (prostředí Cowork)
 
 - Sandbox v Cowork neumí mazat gitové `.lock` soubory na Desktopu → po každé git operaci zůstane stale `index.lock`. Řešení: přesunout ho stranou souborovým nástrojem (move na `*.stale`) před další git operací. V Claude Code (nativně) tento problém nebude.
