@@ -144,25 +144,40 @@ export default async function PresentationsPage({
                 }}
               >
                 <div>
-                  <div style={{ fontWeight: 600 }}>
+                  <Link href={`/presentations/${p.id}/edit`} style={{ fontWeight: 600 }}>
                     {p.title || [p.street, p.city].filter(Boolean).join(", ") || "Bez názvu"}
-                  </div>
+                  </Link>
                   <div style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: "0.2rem" }}>
                     {[p.street, p.city].filter(Boolean).join(", ") || "adresa neuvedena"} · {formatPrice(p.price_czk)}
                   </div>
                 </div>
-                <span
-                  style={{
-                    fontSize: "0.8rem",
-                    color: "var(--accent)",
-                    border: "1px solid #334155",
-                    borderRadius: "999px",
-                    padding: "0.2rem 0.7rem",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {STATUS_LABEL[p.status] ?? p.status}
-                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+                  <span
+                    style={{
+                      fontSize: "0.8rem",
+                      color: "var(--accent)",
+                      border: "1px solid #334155",
+                      borderRadius: "999px",
+                      padding: "0.2rem 0.7rem",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {STATUS_LABEL[p.status] ?? p.status}
+                  </span>
+                  <Link
+                    href={`/presentations/${p.id}/edit`}
+                    style={{
+                      fontSize: "0.85rem",
+                      color: "var(--foreground)",
+                      border: "1px solid #334155",
+                      borderRadius: "8px",
+                      padding: "0.35rem 0.8rem",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Upravit
+                  </Link>
+                </div>
               </li>
             ))}
           </ul>
