@@ -5,7 +5,8 @@ import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { PHOTOS_BUCKET } from "@/lib/photos";
 import { formatPrice, formatArea, formatAddress } from "@/lib/format";
 
-// Veřejná stránka prezentace pro zájemce.
+// Veřejná stránka prezentace pro zájemce — světlá prezentační šablona
+// (serifové nadpisy, vzdušná typografie; fonty řeší listing/layout.tsx).
 // Kdo ji uvidí, řeší RLS v databázi — žádná logika navíc tady není potřeba:
 //   - PUBLIKOVANOU prezentaci (a její fotky) přečte kdokoli, i nepřihlášený;
 //   - KONCEPT přečte jen přihlášený vlastník (tlačítko „Náhled" v editaci);
@@ -22,6 +23,13 @@ const ENERGY_LABEL: Record<string, string> = {
   F: "velmi nehospodárná",
   G: "mimořádně nehospodárná",
 };
+
+// Světlá paleta šablony (podle referenční Otínské: bílá, tmavý text, teplá šedá)
+const INK = "#1c1917"; // hlavní text
+const MUTED = "#646463"; // tlumený text
+const BORDER = "#e7e5e4"; // linky a rámečky
+const PAPER_ALT = "#faf9f7"; // jemné podbarvení karet
+const DISPLAY = "var(--font-display), Georgia, serif"; // serifové nadpisy
 
 type ListingParams = { slug: string };
 
@@ -49,8 +57,7 @@ export async function generateMetadata({
   const { slug } = await params;
   const { presentation: p } = await loadListing(slug);
   if (!p) return { title: "Prezentace nenalezena · Prodej si sám" };
-  const name =
-    p.title || formatAddress(p) || "Prezentace nemovitosti";
+  const name = p.title || formatAddress(p) || "Prezentace nemovitosti";
   return {
     title: `${name} · Prodej si sám`,
     description:
@@ -61,15 +68,19 @@ export async function generateMetadata({
 }
 
 const sectionTitle: React.CSSProperties = {
-  fontSize: "1.35rem",
-  fontWeight: 700,
-  marginBottom: "0.75rem",
+  fontFamily: DISPLAY,
+  fontSize: "clamp(1.5rem, 3.5vw, 1.9rem)",
+  fontWeight: 600,
+  marginBottom: "1rem",
+  color: INK,
 };
 
 const proseText: React.CSSProperties = {
   whiteSpace: "pre-line",
-  lineHeight: 1.7,
-  color: "var(--foreground)",
+  lineHeight: 1.8,
+  color: "#3a3835",
+  fontSize: "1.05rem",
+  maxWidth: "42rem",
 };
 
 /** Sekce s nadpisem. Když obsah chybí: v náhledu ukáže vlídný prázdný stav
@@ -96,14 +107,15 @@ function TextSection({
       ) : (
         <div
           style={{
-            border: "1px dashed #334155",
+            border: `1px dashed ${BORDER}`,
             borderRadius: "10px",
             padding: "1.25rem",
-            color: "var(--muted)",
+            color: MUTED,
+            background: PAPER_ALT,
           }}
         >
           Tahle sekce je zatím prázdná — na veřejné stránce se nezobrazí.{" "}
-          <Link href={fillHref} style={{ color: "var(--accent)" }}>
+          <Link href={fillHref} style={{ color: INK, textDecoration: "underline" }}>
             {fillLabel} →
           </Link>
         </div>
@@ -131,9 +143,11 @@ export default async function ListingPage({
           textAlign: "center",
         }}
       >
-        <h1 style={{ fontSize: "1.6rem", fontWeight: 700 }}>Prezentace nemovitosti</h1>
-        <p style={{ color: "var(--muted)" }}>Zobrazení zatím není zapnuté (chybí napojení na Supabase).</p>
-        <Link href="/" style={{ color: "var(--accent)" }}>← zpět na úvod</Link>
+        <h1 style={{ fontFamily: DISPLAY, fontSize: "1.8rem", fontWeight: 600 }}>
+          Prezentace nemovitosti
+        </h1>
+        <p style={{ color: MUTED }}>Zobrazení zatím není zapnuté (chybí napojení na Supabase).</p>
+        <Link href="/" style={{ color: INK, textDecoration: "underline" }}>← zpět na úvod</Link>
       </main>
     );
   }
@@ -179,7 +193,9 @@ export default async function ListingPage({
 
   const displayTitle = p.title || formatAddress(p) || "Prezentace nemovitosti";
   const address = formatAddress(p);
-  const chips = [p.disposition, p.property_type].filter(Boolean) as string[];
+  const kicker = [p.disposition, p.property_type, p.city]
+    .filter(Boolean)
+    .join("  ·  ");
 
   const parameters: { label: string; value: string }[] = [];
   if (p.property_type) parameters.push({ label: "Typ nemovitosti", value: p.property_type });
@@ -198,13 +214,13 @@ export default async function ListingPage({
   const hasContact = Boolean(p.contact_name || p.contact_email || p.contact_phone);
 
   return (
-    <main style={{ minHeight: "100vh", paddingBottom: "3rem" }}>
+    <main style={{ paddingBottom: "4rem" }}>
       {isPreview ? (
         <div
           style={{
-            background: "rgba(56,189,248,0.12)",
-            borderBottom: "1px solid rgba(56,189,248,0.35)",
-            color: "var(--accent)",
+            background: "#eff6ff",
+            borderBottom: "1px solid #bfdbfe",
+            color: "#1d4ed8",
             padding: "0.6rem 1rem",
             textAlign: "center",
             fontSize: "0.9rem",
@@ -220,73 +236,73 @@ export default async function ListingPage({
         </div>
       ) : null}
 
-      {/* HERO — hlavní fotka, titulek, adresa, cena */}
-      <header style={{ position: "relative" }}>
-        <div
-          style={{
-            height: heroUrl ? "min(65vh, 34rem)" : "auto",
-            minHeight: heroUrl ? undefined : "14rem",
-            background: heroUrl
-              ? "#0f172a"
-              : "linear-gradient(160deg, #0f172a 0%, #1e293b 60%, #0b1120 100%)",
-            overflow: "hidden",
-          }}
-        >
-          {heroUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element -- podepsané URL jsou dočasné, next/image je neumí kešovat
-            <img
-              src={heroUrl}
-              alt={displayTitle}
-              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-            />
-          ) : null}
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              background:
-                "linear-gradient(to top, rgba(11,17,32,0.95) 0%, rgba(11,17,32,0.35) 45%, rgba(11,17,32,0.15) 100%)",
-            }}
+      {/* HERO — velká fotka na celou šířku */}
+      {heroUrl ? (
+        <div style={{ height: "min(72vh, 42rem)", overflow: "hidden", background: PAPER_ALT }}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- podepsané URL jsou dočasné, next/image je neumí kešovat */}
+          <img
+            src={heroUrl}
+            alt={displayTitle}
+            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
           />
         </div>
-        <div
+      ) : null}
+
+      {/* HLAVIČKA — titulek, adresa, cena (pod fotkou, vzdušně) */}
+      <header
+        style={{
+          maxWidth: "60rem",
+          margin: "0 auto",
+          padding: "clamp(2rem, 6vw, 3.5rem) 1.5rem clamp(1.5rem, 4vw, 2.5rem)",
+          display: "flex",
+          flexDirection: "column",
+          gap: "0.9rem",
+          borderBottom: `1px solid ${BORDER}`,
+        }}
+      >
+        {kicker ? (
+          <p
+            style={{
+              textTransform: "uppercase",
+              letterSpacing: "0.18em",
+              fontSize: "0.78rem",
+              color: MUTED,
+            }}
+          >
+            {kicker}
+          </p>
+        ) : null}
+        <h1
           style={{
-            position: "absolute",
-            left: 0,
-            right: 0,
-            bottom: 0,
-            padding: "1.5rem",
+            fontFamily: DISPLAY,
+            fontSize: "clamp(2rem, 6vw, 3.2rem)",
+            fontWeight: 600,
+            lineHeight: 1.12,
+            color: INK,
           }}
         >
-          <div style={{ maxWidth: "60rem", margin: "0 auto", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-            {chips.length > 0 ? (
-              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                {chips.map((chip) => (
-                  <span
-                    key={chip}
-                    style={{
-                      fontSize: "0.8rem",
-                      border: "1px solid rgba(148,163,184,0.5)",
-                      borderRadius: "999px",
-                      padding: "0.2rem 0.75rem",
-                      background: "rgba(11,17,32,0.6)",
-                    }}
-                  >
-                    {chip}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-            <h1 style={{ fontSize: "clamp(1.6rem, 5vw, 2.6rem)", fontWeight: 800, lineHeight: 1.15 }}>
-              {displayTitle}
-            </h1>
-            <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "baseline" }}>
-              {address ? <span style={{ color: "var(--muted)" }}>{address}</span> : null}
-              <span style={{ fontSize: "clamp(1.2rem, 4vw, 1.7rem)", fontWeight: 800, color: "var(--accent)" }}>
-                {formatPrice(p.price_czk)}
-              </span>
-            </div>
-          </div>
+          {displayTitle}
+        </h1>
+        <div
+          style={{
+            display: "flex",
+            gap: "0.5rem 2rem",
+            flexWrap: "wrap",
+            alignItems: "baseline",
+            justifyContent: "space-between",
+          }}
+        >
+          {address ? <span style={{ color: MUTED, fontSize: "1.05rem" }}>{address}</span> : null}
+          <span
+            style={{
+              fontFamily: DISPLAY,
+              fontSize: "clamp(1.4rem, 4vw, 1.9rem)",
+              fontWeight: 700,
+              color: INK,
+            }}
+          >
+            {formatPrice(p.price_czk)}
+          </span>
         </div>
       </header>
 
@@ -294,25 +310,29 @@ export default async function ListingPage({
         style={{
           maxWidth: "60rem",
           margin: "0 auto",
-          padding: "2rem 1.5rem 0",
+          padding: "clamp(2rem, 5vw, 3rem) 1.5rem 0",
           display: "flex",
           flexDirection: "column",
-          gap: "2.5rem",
+          gap: "clamp(2.5rem, 6vw, 3.5rem)",
         }}
       >
         {!heroUrl && isPreview ? (
           <div
             style={{
-              border: "1px dashed #334155",
+              border: `1px dashed ${BORDER}`,
               borderRadius: "10px",
               padding: "1.25rem",
-              color: "var(--muted)",
+              color: MUTED,
+              background: PAPER_ALT,
             }}
           >
             {photos.length > 0
               ? "Náhledy fotek se nepodařilo načíst — zkontroluj, že je zapnuté úložiště (bucket) podle kroků pro Karla."
               : "Prezentace zatím nemá žádné fotky — hlavní fotka prodává nejvíc."}{" "}
-            <Link href={`/presentations/${p.id}/photos`} style={{ color: "var(--accent)" }}>
+            <Link
+              href={`/presentations/${p.id}/photos`}
+              style={{ color: INK, textDecoration: "underline" }}
+            >
               Přidat fotky →
             </Link>
           </div>
@@ -325,8 +345,8 @@ export default async function ListingPage({
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(min(220px, 100%), 1fr))",
-                gap: "0.75rem",
+                gridTemplateColumns: "repeat(auto-fill, minmax(min(240px, 100%), 1fr))",
+                gap: "0.9rem",
               }}
             >
               {galleryPhotos.map((photo, i) => {
@@ -340,10 +360,10 @@ export default async function ListingPage({
                     style={{
                       display: "block",
                       aspectRatio: "4 / 3",
-                      background: "#0f172a",
-                      borderRadius: "10px",
+                      background: PAPER_ALT,
+                      borderRadius: "8px",
                       overflow: "hidden",
-                      border: "1px solid #1e293b",
+                      border: `1px solid ${BORDER}`,
                     }}
                   >
                     {url ? (
@@ -361,7 +381,7 @@ export default async function ListingPage({
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
-                          color: "var(--muted)",
+                          color: MUTED,
                           fontSize: "0.8rem",
                         }}
                       >
@@ -405,24 +425,36 @@ export default async function ListingPage({
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))",
-                gap: "0.75rem",
+                gridTemplateColumns: "repeat(auto-fit, minmax(min(170px, 100%), 1fr))",
+                gap: "0.9rem",
               }}
             >
               {parameters.map((param) => (
                 <div
                   key={param.label}
                   style={{
-                    border: "1px solid #1e293b",
+                    background: PAPER_ALT,
+                    border: `1px solid ${BORDER}`,
                     borderRadius: "10px",
-                    padding: "0.85rem 1rem",
+                    padding: "1rem 1.1rem",
                     display: "flex",
                     flexDirection: "column",
-                    gap: "0.25rem",
+                    gap: "0.3rem",
                   }}
                 >
-                  <span style={{ color: "var(--muted)", fontSize: "0.8rem" }}>{param.label}</span>
-                  <span style={{ fontWeight: 700 }}>{param.value}</span>
+                  <span
+                    style={{
+                      color: MUTED,
+                      fontSize: "0.75rem",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.08em",
+                    }}
+                  >
+                    {param.label}
+                  </span>
+                  <span style={{ fontWeight: 600, fontSize: "1.05rem", color: INK }}>
+                    {param.value}
+                  </span>
                 </div>
               ))}
             </div>
@@ -432,32 +464,42 @@ export default async function ListingPage({
         {/* KONTAKT / CTA */}
         {hasContact || isPreview ? (
           <section>
-            <h2 style={sectionTitle}>Kontakt</h2>
             {hasContact ? (
               <div
                 style={{
-                  border: "1px solid #1e293b",
-                  borderRadius: "12px",
-                  padding: "1.5rem",
+                  background: PAPER_ALT,
+                  border: `1px solid ${BORDER}`,
+                  borderRadius: "14px",
+                  padding: "clamp(1.75rem, 5vw, 2.75rem)",
                   display: "flex",
                   flexDirection: "column",
-                  gap: "1rem",
+                  alignItems: "center",
+                  gap: "1.1rem",
+                  textAlign: "center",
                 }}
               >
-                <p>
-                  Nemovitost prodává{" "}
-                  <strong>{p.contact_name || "majitel"}</strong> — bez realitky, napřímo.
+                <h2 style={{ ...sectionTitle, marginBottom: 0 }}>Zaujalo vás to tu?</h2>
+                <p style={{ color: MUTED, maxWidth: "32rem", lineHeight: 1.7 }}>
+                  Nemovitost prodává <strong style={{ color: INK }}>{p.contact_name || "majitel"}</strong>{" "}
+                  — napřímo, bez realitky. Ozvěte se, rád(a) vám ji ukáže.
                 </p>
-                <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "0.75rem",
+                    flexWrap: "wrap",
+                    justifyContent: "center",
+                  }}
+                >
                   {p.contact_phone ? (
                     <a
                       href={`tel:${p.contact_phone.replace(/\s/g, "")}`}
                       style={{
-                        padding: "0.75rem 1.4rem",
-                        borderRadius: "8px",
-                        background: "var(--accent)",
-                        color: "#04263a",
-                        fontWeight: 700,
+                        padding: "0.85rem 1.6rem",
+                        borderRadius: "999px",
+                        background: INK,
+                        color: "#ffffff",
+                        fontWeight: 600,
                       }}
                     >
                       Zavolat: {p.contact_phone}
@@ -467,11 +509,11 @@ export default async function ListingPage({
                     <a
                       href={`mailto:${p.contact_email}`}
                       style={{
-                        padding: "0.75rem 1.4rem",
-                        borderRadius: "8px",
-                        border: "1px solid var(--accent)",
-                        color: "var(--accent)",
-                        fontWeight: 700,
+                        padding: "0.85rem 1.6rem",
+                        borderRadius: "999px",
+                        border: `1px solid ${INK}`,
+                        color: INK,
+                        fontWeight: 600,
                       }}
                     >
                       Napsat e-mail
@@ -480,36 +522,45 @@ export default async function ListingPage({
                 </div>
               </div>
             ) : (
-              <div
-                style={{
-                  border: "1px dashed #334155",
-                  borderRadius: "10px",
-                  padding: "1.25rem",
-                  color: "var(--muted)",
-                }}
-              >
-                Kontakt na tebe tu zatím chybí — formulář pro kontaktní údaje přijde
-                v dalším kroku vývoje. Bez něj se zájemci nemají jak ozvat.
-              </div>
+              <>
+                <h2 style={sectionTitle}>Kontakt</h2>
+                <div
+                  style={{
+                    border: `1px dashed ${BORDER}`,
+                    borderRadius: "10px",
+                    padding: "1.25rem",
+                    color: MUTED,
+                    background: PAPER_ALT,
+                  }}
+                >
+                  Kontakt na tebe tu zatím chybí — bez něj se zájemci nemají jak ozvat.{" "}
+                  <Link
+                    href={`/presentations/${p.id}/texts`}
+                    style={{ color: INK, textDecoration: "underline" }}
+                  >
+                    Doplnit v kroku Texty →
+                  </Link>
+                </div>
+              </>
             )}
           </section>
         ) : null}
 
         <footer
           style={{
-            borderTop: "1px solid #1e293b",
-            paddingTop: "1.25rem",
+            borderTop: `1px solid ${BORDER}`,
+            paddingTop: "1.5rem",
             display: "flex",
             justifyContent: "space-between",
             gap: "1rem",
             flexWrap: "wrap",
-            color: "var(--muted)",
+            color: MUTED,
             fontSize: "0.85rem",
           }}
         >
           <span>Prodává majitel napřímo.</span>
-          <Link href="/" style={{ color: "var(--muted)" }}>
-            Vytvořeno v <strong style={{ color: "var(--accent)" }}>Prodej si sám</strong>
+          <Link href="/" style={{ color: MUTED }}>
+            Vytvořeno v <strong style={{ color: INK }}>Prodej si sám</strong>
           </Link>
         </footer>
       </div>
