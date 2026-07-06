@@ -30,7 +30,7 @@
 - [x] Veřejná stránka prezentace `/listing/[slug]` (hero, galerie, texty, parametry, kontakt/CTA) — publikovaná veřejně, koncept jen vlastníkovi přes „Náhled ↗" v průvodci; RLS beze změn
 - [x] `npm run build` ověřen v čisté kopii (na mountu je rozbité node_modules → Karel spustí `npm ci`)
 - [ ] Karel: kroky dle `tasks/kroky-pro-karla.md` (npm ci, migrace, bucket, ověření, push)
-- [ ] ClickUp: konektor v session nedostupný — E2.5/E2.6 přepnout ručně (viz kroky pro Karla)
+- [x] ClickUp aktualizován (konektor naskočil v průběhu session): E2.5, E2.6, E2.7 i E2.8 na „in progress" + komentáře co je hotové a co zbývá
 - NEpushnuto (push je vědomý krok Karla).
 
 ## Křížová revize (Codex) — oprava nálezů (2026-07-05)

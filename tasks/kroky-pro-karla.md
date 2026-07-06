@@ -67,13 +67,13 @@ pravidla. Bez tohohle kroku fotky nepůjdou nahrát (aplikace to řekne hláško
 
 Až budeš spokojený: `git push` (klidně přes `PUSH_GITHUB.command`).
 
-## 6. ClickUp
+## 6. ClickUp — HOTOVO, jen mrkni
 
-V téhle session nebyl ClickUp konektor dostupný, takže backlog aktualizuj ručně
-(nebo to nech na příští session s konektorem):
-- **E2.4** (formulář/editace prezentace) → hotovo/urči stav dle svého
-- **E2.5 Fotky** → „in progress" (kód hotový, čeká na bucket + tvoje ověření)
-- **E2.6 Texty** → „in progress" (kód hotový, čeká na migraci + tvoje ověření)
+Konektor v průběhu práce naskočil, takže backlog už je aktualizovaný za tebe:
+**E2.5 Fotky**, **E2.6 Texty**, **E2.7 Šablona veřejné prezentace**
+i **E2.8 Náhled + publikace** jsou na „in progress" a u každého úkolu je
+komentář, co přesně je hotové a co v něm ještě zbývá (zmenšování fotek,
+kontakt v průvodci, doladění šablony podle Otínské, tlačítko Publikovat).
 
 ## Co se může pokazit a jak to vrátit
 
