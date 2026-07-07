@@ -143,3 +143,33 @@ kontakt v průvodci, doladění šablony podle Otínské, tlačítko Publikovat)
     formulace, ať nic neslibuje něco, co nechceš.
 11. **Plán zálohování** (`docs/BACKUP.md`) — schválit + říct, jestli je
     Supabase na free nebo Pro tarifu.
+
+---
+
+# Doplněk 2026-07-07 — Wargame Mise 11 (ClickUp byl mimo provoz)
+
+Proběhla **wargame** (plánování na papíře, nic se v produktu neměnilo) pro
+zbytek MVP: platby Stripe, admin a dotažení správy prezentací. Výsledná
+trasa pro exekutora je v `wargames/11-prodej-si-sam.md`, plán fází
+v `tasks/todo.md`.
+
+**ClickUp konektor při zápisu nefungoval (chyba 500).** Až pojede, přenes
+(nebo řeknu a přenesu já) do listu „Prezentace SaaS — Backlog":
+
+1. Nový úkol: **„Mise 11 — exekuce: Stripe platby + admin + správa"**
+   (status to do) s popisem: trasa `wargames/11-prodej-si-sam.md`; fáze:
+   0 Zajištění stavu → 1 Bezpečnostní základ → 2 Stripe → 3 Auth+správa →
+   4 Admin → uzávěrka se 6 verifikacemi.
+2. Komentář k úkolu E3.9 (Stripe): naplánováno wargame — checkout + webhook
+   s pojistkou proti dvojímu započtení platby; čeká na cenu a Stripe účet.
+3. Komentář k úkolu E3.11/admin (pokud existuje): zvolena varianta bez
+   zásahu do databáze (admin se pozná podle nastavení na serveru), jen ke čtení.
+
+**Co bude exekutor na startu mise potřebovat od tebe** (podrobně a přesně
+se zeptá sám — tady jen ať víš, co přijde): cena prezentace · jestli má
+zůstat náhled zdarma před zaplacením · název na účtence · co po zaplacení
+(zveřejnit samo vs. tlačítko) · smí se mazat zaplacené prezentace ·
+souhlas s dostavbou „Zapomenutého hesla" (dnes neexistuje!) · tvůj admin
+e-mail · schválení BACKUP.md + tarif Supabase · souhlas s instalací
+Stripe CLI · a hlavně kroky 1–3 a 5 výše (npm ci, migrace, bucket, push),
+bez kterých se mise nerozjede.

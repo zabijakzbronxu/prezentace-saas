@@ -21,6 +21,22 @@
 ## Fáze 2 — vývoj MVP
 - [ ] Začít úkolem E1.1 (založení aplikace + Vercel) v ČISTÉ konverzaci
 
+## Session 2026-07-07 (odpoledne) — Wargame Mise 11 „Prodej si sám"
+
+- [x] Wargame provedena (rozkaz `tasks/wargame-11.md`): read-only recon celého repa (6 agentů), adversariální plánování 4 modulů, křížová revize 3 nezávislými revizory — 20 nálezů zapracováno (žádný kritický)
+- [x] Trasa exekutora: `wargames/11-prodej-si-sam.md` — tah po tahu, s očekáváními, selháními, protitahy, větvemi, BLOCKED/STOP/RECON NEEDED, abort podmínkami a definicí PASS všech 6 povinných verifikací
+- [x] Klíčová zjištění reconu: reset hesla v aplikaci NEEXISTUJE; 5 migrací + zpřísněné Storage policies čekají na Karla (živá DB možná pozadu za repem); main je 39 commitů před GitHubem; `app/.env.local` neexistuje; Stripe CLI a pg_dump na stroji chybí (Docker je)
+- Plán fází mise (odškrtává exekutor při exekuci, ne teď):
+  - [ ] Otázky K1–K10 + prosby P1–P3 položeny Karlovi jednou zprávou (viz sekce 2 trasy)
+  - [ ] FÁZE 0 — Zajištění stavu: V1 soulad živé DB s repem + git push · V6 metodika migrací s ověřeným rollbackem · V7 backup + zkouška obnovy · 0.5 uzávěrka
+  - [ ] FÁZE 1 — Bezpečnostní základ: M1 prostředí+účty · M2 audit správy · V2 izolace dat (verifikace 1) · V3a publikační brána negativně · M4 mazání
+  - [ ] FÁZE 2 — Stripe platba předem: S2–S15 (S13 publikace po odpovědi K4; verifikace 2+3)
+  - [ ] FÁZE 3 — Auth + dotažení správy: M5 auth e2e · M6+M7 reset hesla (po K6) · M8 expirace session · M9 hlášky (po K9, nadstandard) · M10 (verifikace 4)
+  - [ ] FÁZE 4 — Admin pro Karla: A1–A7 (bez migrace: ADMIN_USER_ID + service_role jen na serveru; A6 = povinná izolační regrese)
+  - [ ] Uzávěrka mise: všech 6 verifikací PASS + doporučit Karlovi povel „security check"
+- [ ] ClickUp zrcadlo listu 901219290922 (stav viz níže / tasks/kroky-pro-karla.md)
+- NEpushnuto (push je vědomý krok Karla).
+
 ## Session 2026-07-06 — editace + E2.5 fotky + E2.6 texty
 - [x] Sdílená validace formuláře (založení i editace hlídají totéž) — `lib/presentations/form.ts`
 - [x] Editace prezentace: `/presentations/[id]/edit` (RLS jen vlastní), odkaz „Upravit" ze seznamu
