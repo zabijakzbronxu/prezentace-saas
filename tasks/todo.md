@@ -36,6 +36,14 @@
 - [x] ClickUp: komentáře k dokončení E2.6/E2.7 doplněny 2026-07-07 ráno (výpadek 503 pominul); zároveň E3.10 a E4.12 na „in progress" + komentáře, návrh záloh okomentován u příslušného úkolu
 - NEpushnuto (push je vědomý krok Karla).
 
+## Session 2026-07-07 (noční dávka 2) — profil, křížová revize a opravy
+- [x] Účet: editace profilu (jméno, telefon) + předvyplnění kontaktu v kroku 3 z profilu; migrace `20260707090000_profile_checks.sql`
+- [x] Křížová revize čerstvým agentem (diff celé dávky): ŽÁDNÝ HIGH nález, RLS/Storage/publikační pojistka drží; 3 MEDIUM + 8 LOW
+- [x] Opraveno po revizi: formuláře neztrácejí rozepsaný text (chyby na místě přes useActionState); atomické operace fotek v DB funkcích pod zámkem (migrace `20260707120000_photos_integrity.sql` — souběhy, unikátní storage_path, hero vždy dorovnaná); přechod na „paid" nově vyžaduje platbu + CHECK tvaru slugu (migrace `20260707121000_status_slug_guard.sql`); chyby v URL jen jako kódy (nejde podvrhnout text); povinné limity bucketu + přísnější upload policy (storage-setup.md); česká množná čísla a počítadlo v uploaderu; miniatura v přehledu má fallback na první fotku; žádná syrová DB hláška uživateli
+- [x] Nezapracované drobnosti z revize (vědomě): required město v UI vs. tolerantnější server (neškodné), middleware→proxy deprecation (počká na Next 17), legacy lowercase energy_class (žádná data)
+- [x] Build + 34 testů zelené v čisté kopii; migrace ověřeny parserem
+- NEpushnuto.
+
 ## Session 2026-07-07 (noční dávka) — přehled, úvod, testy, zálohy
 - [x] E3.10 přehled Moje prezentace: miniatury hero fotek, stav, rychlé odkazy (Upravit/Fotky/Texty/Náhled), mazání prezentace s potvrzením (DB kaskáda + úklid Storage)
 - [x] Úvodní stránka místo „Ahoj světe": hero, Jak to funguje (3 kroky), CTA podle přihlášení; texty odpovídají modelu „platba předem, koncept zdarma" (cena záměrně neuvedena)

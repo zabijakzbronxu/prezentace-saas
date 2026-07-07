@@ -28,23 +28,32 @@ npm run build
 `npm run build` musí skončit bez chyby (my jsme ho ověřili v čisté kopii —
 u tebe po `npm ci` projde taky).
 
-## 2. Spustit tři nové migrace databáze (4 minuty)
+## 2. Spustit pět nových migrací databáze (5 minut)
 
-Přibyly dva textové sloupce („Lokalita a okolí", „Vybavení a přednosti"),
-pojistka délek u kontaktních údajů a pojistka délek u profilu.
+Přibyly: textové sekce, pojistky délek (kontakt, profil), a po křížové revizi
+také ochrana proti souběhům u fotek a zpřísnění stavů/adres prezentací.
 
 1. `supabase.com/dashboard` → tvůj projekt → **SQL Editor** → **New query**
-2. Postupně zkopíruj a spusť (**Run**) obsah těchto tří souborů, v pořadí:
+2. Postupně zkopíruj a spusť (**Run**) obsah těchto souborů, v tomhle pořadí:
    - `app/supabase/migrations/20260706100000_text_sections.sql`
    - `app/supabase/migrations/20260706150000_contact_checks.sql`
    - `app/supabase/migrations/20260707090000_profile_checks.sql`
+   - `app/supabase/migrations/20260707120000_photos_integrity.sql`
+   - `app/supabase/migrations/20260707121000_status_slug_guard.sql`
 3. Všechny musí skončit **Success**. Jdou spustit i dvakrát, nic se nerozbije.
+4. **Pozor:** bez posledních dvou migrací nepůjde nahrávat/řadit fotky
+   (aplikace teď volá databázové funkce z nich).
 
 ## 3. Zapnout úložiště fotek (5 minut)
 
 Podle návodu `app/supabase/storage-setup.md`:
-bucket `presentation-photos` (privátní, 8 MB, JPEG/PNG/WebP) + 4 bezpečnostní
-pravidla. Bez tohohle kroku fotky nepůjdou nahrát (aplikace to řekne hláškou).
+bucket `presentation-photos` (privátní, **povinně** limit 8 MB + jen obrázky)
++ 4 bezpečnostní pravidla. Bez tohohle kroku fotky nepůjdou nahrát
+(aplikace to řekne hláškou).
+
+> Pokud jsi pravidla nastavoval už dřív podle starší verze návodu, spusť SQL
+> blok z návodu ZNOVU — po křížové revizi je pravidlo pro nahrávání přísnější
+> (hlídá i tvar cesty a příponu). Skript si staré verze sám nahradí.
 
 ## 4. Ověřit v prohlížeči (5 minut)
 
