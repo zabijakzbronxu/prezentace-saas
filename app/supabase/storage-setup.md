@@ -22,9 +22,13 @@ srozumitelnou hlášku a nic se nerozbije — ale fotky nepůjdou nahrát.
 3. Klikni **New bucket** a vyplň:
    - **Name:** `presentation-photos` (přesně takhle, malými písmeny)
    - **Public bucket:** **VYPNUTO** (nechat vypnuté — bucket je privátní!)
-   - Pokud dialog nabízí **Additional configuration / File size limit:** nastav **8 MB**
-   - Pokud nabízí **Allowed MIME types:** vyplň `image/jpeg, image/png, image/webp`
+   - **File size limit:** **8 MB** — POVINNÉ (bez toho by šly skriptem
+     nahrávat libovolně velké soubory a účet by mohl vyčerpat úložiště)
+   - **Allowed MIME types:** `image/jpeg, image/png, image/webp` — POVINNÉ
 4. Ulož (**Create bucket** / **Save**).
+5. Pokud dialog pole z bodu 3 nenabízel: otevři vytvořený bucket →
+   **⋮ / Edit bucket** (nastavení) a limit + MIME typy doplň tam.
+   **Bez těchto dvou limitů úložiště nezapínej.**
 
 ## Krok 2 — bezpečnostní pravidla (policies)
 
@@ -40,13 +44,18 @@ Musí skončit **Success**. Skript jde spustit i opakovaně, nic nerozbije.
 -- Cesta souboru: <id_vlastníka>/<id_prezentace>/<náhodné_jméno>.jpg|png|webp
 -- „První složka = ID vlastníka" je základ všech pravidel.
 
--- Nahrávat smí jen přihlášený, a jen do SVÉ složky.
+-- Nahrávat smí jen přihlášený, jen do SVÉ složky, a jen soubory
+-- ve tvaru <moje_id>/<id_prezentace>/<náhodné_jméno>.jpg|png|webp
+-- (žádné vymyšlené cesty ani jiné typy souborů).
 drop policy if exists "photos owner upload" on storage.objects;
 create policy "photos owner upload" on storage.objects
   for insert to authenticated
   with check (
     bucket_id = 'presentation-photos'
     and (storage.foldername(name))[1] = auth.uid()::text
+    and array_length(storage.foldername(name), 1) = 2
+    and (storage.foldername(name))[2] ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    and name ~* '\.(jpg|png|webp)$'
   );
 
 -- Číst smí vlastník svoje soubory (kvůli náhledům v editaci).
