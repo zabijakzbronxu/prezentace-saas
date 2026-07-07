@@ -49,6 +49,31 @@ export default async function PresentationTextsPage({
   if (loadError) {
     console.error("[presentations/texts] načtení selhalo:", loadError.message);
   }
+
+  // Předvyplnění kontaktu z profilu (jen když je kontakt prezentace celý prázdný).
+  // Nic se neukládá samo — uživatel to vidí ve formuláři a ukládá tlačítkem.
+  let contactDefaults = {
+    name: p?.contact_name ?? "",
+    phone: p?.contact_phone ?? "",
+    email: p?.contact_email ?? "",
+  };
+  let contactPrefilled = false;
+  if (p && !p.contact_name && !p.contact_phone && !p.contact_email) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name, phone")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (profile?.full_name || profile?.phone || user.email) {
+      contactDefaults = {
+        name: profile?.full_name ?? "",
+        phone: profile?.phone ?? "",
+        email: user.email ?? "",
+      };
+      contactPrefilled = true;
+    }
+  }
+
   if (!p) {
     return (
       <main style={{ ...wrap, justifyContent: "center", textAlign: "center", gap: "1rem" }}>
@@ -172,6 +197,9 @@ export default async function PresentationTextsPage({
               <p style={{ ...hint, marginTop: "0.25rem" }}>
                 Zobrazí se na veřejné stránce s tlačítky „Zavolat" a „Napsat e-mail".
                 Dokud kontakt nevyplníš, sekce se zájemcům neukáže — a nemají se jak ozvat.
+                {contactPrefilled
+                  ? " Předvyplnili jsme údaje z tvého účtu — zkontroluj je a ulož."
+                  : ""}
               </p>
             </div>
 
@@ -183,7 +211,7 @@ export default async function PresentationTextsPage({
                 name="contact_name"
                 maxLength={MAX.contact_name}
                 placeholder="např. Karel Novák"
-                defaultValue={p.contact_name ?? ""}
+                defaultValue={contactDefaults.name}
               />
             </label>
 
@@ -197,7 +225,7 @@ export default async function PresentationTextsPage({
                   maxLength={MAX.contact_phone}
                   placeholder="např. +420 777 123 456"
                   inputMode="tel"
-                  defaultValue={p.contact_phone ?? ""}
+                  defaultValue={contactDefaults.phone}
                 />
               </label>
               <label style={label}>
@@ -209,7 +237,7 @@ export default async function PresentationTextsPage({
                   maxLength={MAX.contact_email}
                   placeholder="např. karel@email.cz"
                   inputMode="email"
-                  defaultValue={p.contact_email ?? ""}
+                  defaultValue={contactDefaults.email}
                 />
               </label>
             </div>
