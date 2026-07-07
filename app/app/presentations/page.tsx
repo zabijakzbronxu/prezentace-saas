@@ -96,35 +96,43 @@ export default async function PresentationsPage({
 
   const list = presentations ?? [];
 
-  // Miniatury: hlavní (hero) fotka každé prezentace, jedním dotazem pro všechny.
+  // Miniatury: hlavní (hero) fotka každé prezentace; když hero chybí
+  // (např. selhalo povýšení po smazání), vezme se první fotka v pořadí.
   const thumbnails = new Map<string, string>(); // presentation_id → podepsaná URL
   if (list.length > 0) {
-    const { data: heroPhotos, error: photosError } = await supabase
+    const { data: photos, error: photosError } = await supabase
       .from("presentation_photos")
-      .select("presentation_id, storage_path")
+      .select("presentation_id, storage_path, is_hero, sort_order")
       .in(
         "presentation_id",
         list.map((p) => p.id),
       )
-      .eq("is_hero", true);
+      .order("is_hero", { ascending: false })
+      .order("sort_order", { ascending: true });
     if (photosError) {
       console.error("[presentations] načtení miniatur selhalo:", photosError.message);
     }
-    if (heroPhotos && heroPhotos.length > 0) {
+    // Díky řazení (hero první, pak dle pořadí) je první výskyt prezentace
+    // rovnou ta správná miniatura.
+    const thumbPaths = new Map<string, string>();
+    for (const ph of photos ?? []) {
+      if (!thumbPaths.has(ph.presentation_id)) {
+        thumbPaths.set(ph.presentation_id, ph.storage_path);
+      }
+    }
+    if (thumbPaths.size > 0) {
+      const paths = [...thumbPaths.values()];
       const { data: signed, error: signError } = await supabase.storage
         .from(PHOTOS_BUCKET)
-        .createSignedUrls(
-          heroPhotos.map((ph) => ph.storage_path),
-          60 * 60,
-        );
+        .createSignedUrls(paths, 60 * 60);
       if (signError || !signed) {
         // Bez miniatur se obejdeme — nejspíš ještě není zapnutý bucket.
         console.error("[presentations] podepsané odkazy miniatur selhaly:", signError?.message);
       } else {
         const byPath = new Map(signed.map((s) => [s.path, s.signedUrl] as const));
-        for (const ph of heroPhotos) {
-          const url = byPath.get(ph.storage_path);
-          if (url) thumbnails.set(ph.presentation_id, url);
+        for (const [presentationId, path] of thumbPaths) {
+          const url = byPath.get(path);
+          if (url) thumbnails.set(presentationId, url);
         }
       }
     }
@@ -142,7 +150,14 @@ export default async function PresentationsPage({
 
         {created ? <SuccessBox>Prezentace uložena jako koncept. ✅</SuccessBox> : null}
         {deleted ? <SuccessBox>Prezentace smazána. ✅</SuccessBox> : null}
-        {error ? <ErrorBox>{error}</ErrorBox> : null}
+        {error ? (
+          <ErrorBox>
+            {/* Kód z URL → pevná hláška; neznámý kód dostane obecnou (nikdo nepodvrhne text). */}
+            {error === "delete-failed"
+              ? "Smazání prezentace se nepovedlo, zkus to prosím znovu."
+              : "Něco se nepovedlo, zkus to prosím znovu."}
+          </ErrorBox>
+        ) : null}
 
         {list.length === 0 ? (
           <div

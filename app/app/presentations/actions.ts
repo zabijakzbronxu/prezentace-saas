@@ -37,11 +37,8 @@ export async function deletePresentation(formData: FormData) {
 
   if (error || !deleted) {
     console.error("[presentations] smazání selhalo:", error?.message);
-    redirect(
-      `/presentations?error=${encodeURIComponent(
-        "Smazání prezentace se nepovedlo, zkus to prosím znovu.",
-      )}`,
-    );
+    // Jen kód chyby — text drží stránka (nikdo nepodvrhne hlášku přes URL).
+    redirect("/presentations?error=delete-failed");
   }
 
   if (photos && photos.length > 0) {
