@@ -11,6 +11,7 @@ Fakta a rozhodnutí, která musí přežít mezi konverzacemi. Co tu není zapsa
 - **Pracovní název produktu: „Prodej si sám"** (finální název + doména před spuštěním).
 - **Cenový model: platba předem** — prezentace se nezveřejní bez zaplacení (Karel, 2026-07-04).
 - Křížová kontrola: zatím **čerstvý Claude agent** jako nezávislý revizor (proč: Karel zatím nemá OpenAI předplatné); Codex doplníme později.
+- **Codex CLI je nainstalovaný a přihlášený** (`codex` v0.142.5, homebrew) — ale účet je na free limitu: pokus o revizi 2026-07-07 skončil „usage limit, try again Aug 4th 2026 / start Plus trial". Pro Codex revize dřív je potřeba ChatGPT Plus. Pomocná větev `codex-review-base` (commit 903d911) je připravená — revizi pak spustit: `codex exec -s read-only "…zadání…" < /dev/null`.
 - Projekt žije v `~/Desktop/prezentace-saas/`, git od první minuty.
 - Referenční vzor výsledné prezentace: Otínská (`~/Desktop/index.html`, podklady dle `~/Desktop/OTINSKA_podklady_cesty.md`).
 - Start se 3 checky (security, performance, ux), ne 15 — rostou s produktem.

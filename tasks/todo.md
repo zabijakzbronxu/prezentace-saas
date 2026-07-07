@@ -42,6 +42,7 @@
 - [x] Opraveno po revizi: formuláře neztrácejí rozepsaný text (chyby na místě přes useActionState); atomické operace fotek v DB funkcích pod zámkem (migrace `20260707120000_photos_integrity.sql` — souběhy, unikátní storage_path, hero vždy dorovnaná); přechod na „paid" nově vyžaduje platbu + CHECK tvaru slugu (migrace `20260707121000_status_slug_guard.sql`); chyby v URL jen jako kódy (nejde podvrhnout text); povinné limity bucketu + přísnější upload policy (storage-setup.md); česká množná čísla a počítadlo v uploaderu; miniatura v přehledu má fallback na první fotku; žádná syrová DB hláška uživateli
 - [x] Nezapracované drobnosti z revize (vědomě): required město v UI vs. tolerantnější server (neškodné), middleware→proxy deprecation (počká na Next 17), legacy lowercase energy_class (žádná data)
 - [x] Build + 34 testů zelené v čisté kopii; migrace ověřeny parserem
+- [ ] Codex (OpenAI) revize: CLI je na stroji přihlášené, ale účet narazil na usage limit („try again Aug 4th 2026" / potřeba ChatGPT Plus). Náhradou proběhla revize čerstvým Claude agentem (viz výše). Až bude Plus: pomocná větev `codex-review-base` je připravená, postup v memory/MEMORY.md. → rozhodnutí Karla, jestli Plus pořídit.
 - NEpushnuto.
 
 ## Session 2026-07-07 (noční dávka) — přehled, úvod, testy, zálohy
