@@ -28,17 +28,17 @@ npm run build
 `npm run build` musí skončit bez chyby (my jsme ho ověřili v čisté kopii —
 u tebe po `npm ci` projde taky).
 
-## 2. Spustit dvě nové migrace databáze (3 minuty)
+## 2. Spustit tři nové migrace databáze (4 minuty)
 
-Přibyly dva textové sloupce („Lokalita a okolí", „Vybavení a přednosti")
-a pojistka délek u kontaktních údajů.
+Přibyly dva textové sloupce („Lokalita a okolí", „Vybavení a přednosti"),
+pojistka délek u kontaktních údajů a pojistka délek u profilu.
 
 1. `supabase.com/dashboard` → tvůj projekt → **SQL Editor** → **New query**
-2. Zkopíruj celý obsah souboru
-   `app/supabase/migrations/20260706100000_text_sections.sql` a spusť (**Run**).
-3. Stejně pak spusť i
-   `app/supabase/migrations/20260706150000_contact_checks.sql`.
-4. Obě musí skončit **Success**. Jdou spustit i dvakrát, nic se nerozbije.
+2. Postupně zkopíruj a spusť (**Run**) obsah těchto tří souborů, v pořadí:
+   - `app/supabase/migrations/20260706100000_text_sections.sql`
+   - `app/supabase/migrations/20260706150000_contact_checks.sql`
+   - `app/supabase/migrations/20260707090000_profile_checks.sql`
+3. Všechny musí skončit **Success**. Jdou spustit i dvakrát, nic se nerozbije.
 
 ## 3. Zapnout úložiště fotek (5 minut)
 
@@ -77,6 +77,10 @@ pravidla. Bez tohohle kroku fotky nepůjdou nahrát (aplikace to řekne hláško
 10. **Testy:** v terminálu `npm test` v `app/` — musí proběhnout
     „34 passed". (Základ úkolu E4.12 — testy validací, slugů, fotek.)
 11. **Plán zálohování:** přečti `docs/BACKUP.md` (návrh) a schval/uprav.
+12. **Profil na účtu:** na `/account` vyplň jméno a telefon → ulož →
+    „Profil uložen ✅". Pak založ novou prezentaci a dojdi do kroku
+    **3. Texty** — kontakt dole bude předvyplněný z profilu (včetně
+    e-mailu účtu); nic se neukládá samo, dokud nedáš Uložit.
 7. **Kontrola soukromí konceptu:** zkopíruj adresu náhledu
    (`/listing/…`) a otevři ji v anonymním okně — musí se ukázat
    „Prezentace není dostupná". Koncept bez přihlášení nikdo neuvidí.
