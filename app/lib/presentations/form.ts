@@ -65,6 +65,12 @@ export type ParseResult<T> =
   | { ok: false; message: string };
 
 /**
+ * Stav formuláře pro useActionState: akce při chybě vrátí hlášku a formulář
+ * ji ukáže NA MÍSTĚ — bez přesměrování, takže rozepsané hodnoty zůstanou.
+ */
+export type FormState = { error?: string };
+
+/**
  * Přečte a zvaliduje základní údaje prezentace z formuláře.
  * Vrací buď hodnoty připravené k uložení, nebo českou chybovou hlášku.
  */

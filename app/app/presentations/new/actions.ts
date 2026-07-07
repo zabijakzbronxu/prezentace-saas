@@ -4,18 +4,18 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { slugify, randomSuffix } from "@/lib/slug";
-import { parseBasicFields } from "@/lib/presentations/form";
-
-function backWithError(message: string): never {
-  redirect(`/presentations/new?error=${encodeURIComponent(message)}`);
-}
+import { parseBasicFields, type FormState } from "@/lib/presentations/form";
 
 /**
  * Krok 1 průvodce: založí novou prezentaci ve stavu "draft" (koncept).
  * Respektuje RLS — owner_id musí být přihlášený uživatel.
- * Validace je sdílená s editací v lib/presentations/form.ts.
+ * Chyby vrací jako stav formuláře (useActionState) — vyplněné hodnoty
+ * ve formuláři zůstávají, nic se neztrácí přesměrováním.
  */
-export async function createPresentation(formData: FormData) {
+export async function createPresentation(
+  _prevState: FormState,
+  formData: FormData,
+): Promise<FormState> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -23,7 +23,7 @@ export async function createPresentation(formData: FormData) {
   if (!user) redirect("/login");
 
   const parsed = parseBasicFields(formData);
-  if (!parsed.ok) backWithError(parsed.message);
+  if (!parsed.ok) return { error: parsed.message };
   const values = parsed.values;
 
   // Základ slugu z adresy (nebo z titulku), + náhodná přípona pro unikátnost.
@@ -33,7 +33,6 @@ export async function createPresentation(formData: FormData) {
     "prezentace";
 
   // Vlož; při kolizi slugu (velmi nepravděpodobné) to párkrát zkus znovu.
-  let lastMessage = "Uložení se nepovedlo, zkus to prosím znovu.";
   for (let attempt = 0; attempt < 5; attempt++) {
     const slug = `${base}-${randomSuffix()}`;
     const { data, error } = await supabase
@@ -53,13 +52,13 @@ export async function createPresentation(formData: FormData) {
       redirect(`/presentations/${data.id}/photos?created=1`);
     }
 
-    // 23505 = porušení unikátnosti (slug) → zkusit jiný slug
+    // 23505 = porušení unikátnosti (slug) → zkusit jiný slug.
+    // Jinou chybu zaloguj; uživateli patří česká hláška, ne syrová z databáze.
     if (error && error.code !== "23505") {
-      lastMessage = error.message;
+      console.error("[presentations/new] založení selhalo:", error.message);
       break;
     }
-    if (error) lastMessage = error.message;
   }
 
-  backWithError(lastMessage);
+  return { error: "Uložení se nepovedlo, zkus to prosím znovu." };
 }

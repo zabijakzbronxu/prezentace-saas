@@ -2,17 +2,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { createPresentation } from "./actions";
-import { wrap, card, label, hint, input, row, primaryBtn, ErrorBox } from "../ui";
+import { wrap, card, hint } from "../ui";
+import { BasicFieldsForm } from "../basic-form";
 
 export const dynamic = "force-dynamic";
 
-export default async function NewPresentationPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string }>;
-}) {
-  const { error } = await searchParams;
-
+export default async function NewPresentationPage() {
   if (!isSupabaseConfigured()) {
     return (
       <main style={{ ...wrap, justifyContent: "center", textAlign: "center", gap: "1rem" }}>
@@ -43,101 +38,16 @@ export default async function NewPresentationPage({
           </p>
         </div>
 
-        {error ? <ErrorBox>{error}</ErrorBox> : null}
-
-        <form action={createPresentation} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-          <label style={label}>
-            Ulice a číslo
-            <input style={input} type="text" name="street" placeholder="např. Otínská 123" />
-          </label>
-
-          <div style={row}>
-            <label style={label}>
-              Město / obec <span style={{ color: "var(--accent)" }}>*</span>
-              <input style={input} type="text" name="city" placeholder="např. Praha" required />
-            </label>
-            <label style={label}>
-              PSČ
-              <input style={input} type="text" name="postal_code" placeholder="např. 153 00" inputMode="numeric" />
-            </label>
-          </div>
-
-          <div style={row}>
-            <label style={label}>
-              Typ nemovitosti
-              <input style={input} type="text" name="property_type" list="property-types" placeholder="vyber nebo napiš" />
-              <datalist id="property-types">
-                <option value="Byt" />
-                <option value="Rodinný dům" />
-                <option value="Pozemek" />
-                <option value="Chata / chalupa" />
-                <option value="Komerční prostor" />
-              </datalist>
-            </label>
-            <label style={label}>
-              Dispozice
-              <input style={input} type="text" name="disposition" list="dispositions" placeholder="např. 3+kk" />
-              <datalist id="dispositions">
-                <option value="1+kk" />
-                <option value="1+1" />
-                <option value="2+kk" />
-                <option value="2+1" />
-                <option value="3+kk" />
-                <option value="3+1" />
-                <option value="4+kk" />
-                <option value="4+1" />
-                <option value="5+1" />
-                <option value="6 a více" />
-              </datalist>
-            </label>
-          </div>
-
-          <div style={row}>
-            <label style={label}>
-              Užitná plocha (m²)
-              <input style={input} type="text" name="floor_area_m2" placeholder="např. 82" inputMode="decimal" />
-            </label>
-            <label style={label}>
-              Plocha pozemku (m²)
-              <input style={input} type="text" name="land_area_m2" placeholder="např. 350" inputMode="decimal" />
-            </label>
-          </div>
-
-          <div style={row}>
-            <label style={label}>
-              Cena (Kč) <span style={{ color: "var(--accent)" }}>*</span>
-              <input style={input} type="text" name="price_czk" placeholder="např. 8 900 000" inputMode="numeric" required />
-            </label>
-            <label style={label}>
-              Energetická třída (PENB)
-              <select style={input} name="energy_class" defaultValue="">
-                <option value="">— nevím / nevyplňovat —</option>
-                <option value="A">A — mimořádně úsporná</option>
-                <option value="B">B — velmi úsporná</option>
-                <option value="C">C — úsporná</option>
-                <option value="D">D — méně úsporná</option>
-                <option value="E">E — nehospodárná</option>
-                <option value="F">F — velmi nehospodárná</option>
-                <option value="G">G — mimořádně nehospodárná</option>
-              </select>
-            </label>
-          </div>
-
-          <label style={label}>
-            Titulek prezentace
-            <input style={input} type="text" name="title" placeholder="např. Slunný byt 3+kk s balkonem" />
-            <span style={hint}>Nepovinné — krátký poutavý název. Když ho necháš prázdný, doplníme později.</span>
-          </label>
-
-          <div style={{ display: "flex", gap: "1rem", alignItems: "center", marginTop: "0.5rem" }}>
-            <button type="submit" style={primaryBtn}>
-              Uložit a pokračovat
-            </button>
+        <BasicFieldsForm
+          action={createPresentation}
+          submitLabel="Uložit a pokračovat"
+          titleHint="Nepovinné — krátký poutavý název. Když ho necháš prázdný, doplníme později."
+          footer={
             <Link href="/presentations" style={{ color: "var(--muted)" }}>
               Zrušit
             </Link>
-          </div>
-        </form>
+          }
+        />
       </div>
     </main>
   );

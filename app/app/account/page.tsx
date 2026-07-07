@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
-import { MAX } from "@/lib/presentations/form";
 import { signOut } from "../login/actions";
-import { updateProfile } from "./actions";
-import { label, hint, input, primaryBtn, ErrorBox, SuccessBox } from "../presentations/ui";
+import { ProfileForm } from "./profile-form";
+import { primaryBtn, SuccessBox } from "../presentations/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -27,9 +26,9 @@ const card: React.CSSProperties = {
 export default async function AccountPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; saved?: string }>;
+  searchParams: Promise<{ saved?: string }>;
 }) {
-  const { error, saved } = await searchParams;
+  const { saved } = await searchParams;
 
   if (!isSupabaseConfigured()) {
     return (
@@ -79,56 +78,14 @@ export default async function AccountPage({
           Moje prezentace →
         </Link>
 
-        {error ? <ErrorBox>{error}</ErrorBox> : null}
         {saved ? <SuccessBox>Profil uložen. ✅</SuccessBox> : null}
 
-        <form
-          action={updateProfile}
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: "1.25rem",
-            borderTop: "1px solid #1e293b",
-            paddingTop: "1.25rem",
+        <ProfileForm
+          defaults={{
+            full_name: profile?.full_name ?? "",
+            phone: profile?.phone ?? "",
           }}
-        >
-          <div>
-            <h2 style={{ fontSize: "1.15rem", fontWeight: 700 }}>Profil</h2>
-            <p style={{ ...hint, marginTop: "0.25rem" }}>
-              Jméno a telefon použijeme jako předvyplnění kontaktu u nových
-              prezentací. Obojí je nepovinné.
-            </p>
-          </div>
-
-          <label style={label}>
-            Jméno
-            <input
-              style={input}
-              type="text"
-              name="full_name"
-              maxLength={MAX.contact_name}
-              placeholder="např. Karel Novák"
-              defaultValue={profile?.full_name ?? ""}
-            />
-          </label>
-
-          <label style={label}>
-            Telefon
-            <input
-              style={input}
-              type="tel"
-              name="phone"
-              maxLength={MAX.contact_phone}
-              placeholder="např. +420 777 123 456"
-              inputMode="tel"
-              defaultValue={profile?.phone ?? ""}
-            />
-          </label>
-
-          <button type="submit" style={{ ...primaryBtn, alignSelf: "flex-start" }}>
-            Uložit profil
-          </button>
-        </form>
+        />
 
         <div style={{ display: "flex", gap: "1rem", alignItems: "center", borderTop: "1px solid #1e293b", paddingTop: "1.25rem" }}>
           <form action={signOut}>
