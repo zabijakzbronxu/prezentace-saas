@@ -36,6 +36,15 @@
 - [ ] ClickUp: doplnit komentáře k dokončení E2.6 (kontakt) a E2.7 (světlá šablona) — při zápisu odpoledne měl ClickUp výpadek (503); text komentářů = souhrn v chatu 2026-07-06
 - NEpushnuto (push je vědomý krok Karla).
 
+## Session 2026-07-07 (noční dávka) — přehled, úvod, testy, zálohy
+- [x] E3.10 přehled Moje prezentace: miniatury hero fotek, stav, rychlé odkazy (Upravit/Fotky/Texty/Náhled), mazání prezentace s potvrzením (DB kaskáda + úklid Storage)
+- [x] Úvodní stránka místo „Ahoj světe": hero, Jak to funguje (3 kroky), CTA podle přihlášení; texty odpovídají modelu „platba předem, koncept zdarma" (cena záměrně neuvedena)
+- [x] E4.12 základ testů: vitest, 34 testů na lib/ (slug, validace základů i kontaktu, magic bytes fotek, cesty souborů, formátování) — vše zelené v čisté kopii
+- [x] docs/BACKUP.md — NÁVRH plánu zálohování a obnovy, čeká na schválení Karla
+- [x] `npm run build` + `npm test` ověřeny v čisté kopii
+- [ ] Karel: ověření v prohlížeči dle `tasks/kroky-pro-karla.md` (body 8–11), schválení BACKUP.md, `git push`
+- NEpushnuto.
+
 ## Křížová revize (Codex) — oprava nálezů (2026-07-05)
 - [x] HIGH: open redirect v `auth/confirm` — jen interní cesty, fallback `/account`
 - [x] HIGH: DB pojistka „bez zaplacení nezveřejníš" — trigger `enforce_paid_before_publish`

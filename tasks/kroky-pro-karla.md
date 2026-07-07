@@ -68,6 +68,15 @@ pravidla. Bez tohohle kroku fotky nepůjdou nahrát (aplikace to řekne hláško
    ulož → v Náhledu se dole objeví karta „Zaujalo vás to tu?" s tlačítky
    **Zavolat** a **Napsat e-mail** (tlačítka zkus — musí otevřít volání /
    nový e-mail). Když kontakt smažeš, sekce ze stránky zmizí.
+8. **Nový přehled Moje prezentace:** u každé prezentace je miniatura hlavní
+   fotky, stav a tlačítka Upravit / Fotky / Texty / Náhled ↗ / **Smazat**
+   (s potvrzením; smaže i fotky — vyzkoušej na testovací prezentaci).
+9. **Nová úvodní stránka** (`/`): hero + „Jak to funguje" + tlačítko;
+   přihlášenému nabídne rovnou Moje prezentace. Zkontroluj texty — hlavně
+   větu o platbě („platí se jednorázově při zveřejnění, koncept zdarma").
+10. **Testy:** v terminálu `npm test` v `app/` — musí proběhnout
+    „34 passed". (Základ úkolu E4.12 — testy validací, slugů, fotek.)
+11. **Plán zálohování:** přečti `docs/BACKUP.md` (návrh) a schval/uprav.
 7. **Kontrola soukromí konceptu:** zkopíruj adresu náhledu
    (`/listing/…`) a otevři ji v anonymním okně — musí se ukázat
    „Prezentace není dostupná". Koncept bez přihlášení nikdo neuvidí.
@@ -113,3 +122,11 @@ kontakt v průvodci, doladění šablony podle Otínské, tlačítko Publikovat)
    či písmo neseděly, řekni a doladíme.
 8. **Limity kontaktu:** jméno max 120, e-mail max 200, telefon max 30 znaků,
    telefon musí mít aspoň 6 číslic. OK?
+9. **Mazání prezentací** (nové, 2026-07-07): jde smazat kterákoli vlastní
+   prezentace včetně publikované (s potvrzovací otázkou; smaže i fotky).
+   Nechat i pro publikované, nebo publikované chránit?
+10. **Texty úvodní stránky** — psal jsem je podle rozhodnutí „platba předem,
+    koncept zdarma". Konkrétní cena nikde není (ta se teprve určí). Zkontroluj
+    formulace, ať nic neslibuje něco, co nechceš.
+11. **Plán zálohování** (`docs/BACKUP.md`) — schválit + říct, jestli je
+    Supabase na free nebo Pro tarifu.
