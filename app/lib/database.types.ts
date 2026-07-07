@@ -167,7 +167,24 @@ export interface Database {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      register_presentation_photo: {
+        Args: { p_presentation_id: string; p_storage_path: string };
+        Returns: string;
+      };
+      swap_photo_order: {
+        Args: { p_photo_a: string; p_photo_b: string };
+        Returns: null;
+      };
+      set_hero_photo: {
+        Args: { p_photo_id: string };
+        Returns: null;
+      };
+      delete_presentation_photo: {
+        Args: { p_photo_id: string };
+        Returns: string | null;
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

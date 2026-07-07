@@ -54,9 +54,10 @@ export function PhotoUploader({
     }
 
     const supabase = createClient();
+    const batch = files.slice(0, remaining);
 
-    for (const file of files.slice(0, remaining)) {
-      setProgress(`Nahrávám ${uploaded + 1}. z ${Math.min(files.length, remaining)}…`);
+    for (const [index, file] of batch.entries()) {
+      setProgress(`Nahrávám ${index + 1}. z ${batch.length}…`);
 
       if (file.size > MAX_PHOTO_BYTES) {
         problems.push(`„${file.name}": je moc velká (max 8 MB).`);
@@ -96,7 +97,11 @@ export function PhotoUploader({
     }
 
     setBusy(false);
-    setProgress(uploaded > 0 ? `Nahráno ${uploaded} fotek. ✅` : null);
+    setProgress(
+      uploaded > 0
+        ? `${uploaded === 1 ? "Nahrána 1 fotka" : uploaded < 5 ? `Nahrány ${uploaded} fotky` : `Nahráno ${uploaded} fotek`}. ✅`
+        : null,
+    );
     setErrors(problems);
     if (inputRef.current) inputRef.current.value = "";
     if (uploaded > 0) router.refresh();

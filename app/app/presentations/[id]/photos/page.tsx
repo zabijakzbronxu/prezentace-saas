@@ -10,6 +10,14 @@ import { deletePhoto, movePhoto, setHeroPhoto } from "./actions";
 
 export const dynamic = "force-dynamic";
 
+// Chyby chodí v URL jen jako KÓD; texty drží tahle mapa. Neznámý kód dostane
+// obecnou hlášku — přes odkaz tak nikdo nepodvrhne vlastní text.
+const ERROR_TEXT: Record<string, string> = {
+  "delete-failed": "Smazání fotky se nepovedlo, zkus to znovu.",
+  "move-failed": "Změna pořadí se nepovedla, zkus to znovu.",
+  "hero-failed": "Nastavení hlavní fotky se nepovedlo, zkus to znovu.",
+};
+
 export default async function PresentationPhotosPage({
   params,
   searchParams,
@@ -116,7 +124,9 @@ export default async function PresentationPhotosPage({
             Základ je uložený. ✅ Teď přidej fotky — první nahraná se stane hlavní.
           </SuccessBox>
         ) : null}
-        {error ? <ErrorBox>{error}</ErrorBox> : null}
+        {error ? (
+          <ErrorBox>{ERROR_TEXT[error] ?? "Něco se nepovedlo, zkus to prosím znovu."}</ErrorBox>
+        ) : null}
         {storageUnavailable ? (
           <ErrorBox>
             Náhledy fotek se nepodařilo načíst. Nejspíš ještě není zapnuté úložiště
