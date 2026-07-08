@@ -26,7 +26,8 @@
 - [x] Wargame provedena (rozkaz `tasks/wargame-11.md`): read-only recon celého repa (6 agentů), adversariální plánování 4 modulů, křížová revize 3 nezávislými revizory — 20 nálezů zapracováno (žádný kritický)
 - [x] Trasa exekutora: `wargames/11-prodej-si-sam.md` — tah po tahu, s očekáváními, selháními, protitahy, větvemi, BLOCKED/STOP/RECON NEEDED, abort podmínkami a definicí PASS všech 6 povinných verifikací
 - [x] Klíčová zjištění reconu: reset hesla v aplikaci NEEXISTUJE; 5 migrací + zpřísněné Storage policies čekají na Karla (živá DB možná pozadu za repem); main je 39 commitů před GitHubem; `app/.env.local` neexistuje; Stripe CLI a pg_dump na stroji chybí (Docker je)
-- Plán fází mise (odškrtává exekutor při exekuci, ne teď):
+- ⚠️ **2026-07-08 — PREMORTEM PRODUKTU (docs/premortem-report-2026-07-08.html): doporučeno POZASTAVIT exekuci mise (stavbu plateb a adminu), dokud neproběhnou 3 validační testy trhu (předprodej 30 samoprodejcům · distribuční test Sreality/Bezrealitky · falešné dveře + cena akvizice). Rozhodovací brána: 2×PASS ze 3 → stavět dál; jinak pivot/stop — rozhoduje Karel.**
+- Plán fází mise (odškrtává exekutor při exekuci — AŽ PO průchodu branou z premortemu):
   - [ ] Otázky K1–K10 + prosby P1–P3 položeny Karlovi jednou zprávou (viz sekce 2 trasy)
   - [ ] FÁZE 0 — Zajištění stavu: V1 soulad živé DB s repem + git push · V6 metodika migrací s ověřeným rollbackem · V7 backup + zkouška obnovy · 0.5 uzávěrka
   - [ ] FÁZE 1 — Bezpečnostní základ: M1 prostředí+účty · M2 audit správy · V2 izolace dat (verifikace 1) · V3a publikační brána negativně · M4 mazání
