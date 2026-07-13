@@ -46,4 +46,12 @@ describe("isValidPhotoPath", () => {
     expect(isValidPhotoPath(`${USER}/${PRES}/../${FILE}.jpg`, USER, PRES)).toBe(false);
     expect(isValidPhotoPath(`${USER}/${PRES}/muj-soubor.jpg`, USER, PRES)).toBe(false);
   });
+
+  it("odmítne odkaz do CIZÍ složky (revize 2026-07: stejné pravidlo hlídá i DB trigger)", () => {
+    // Útočník s vlastní prezentací zkusí zaregistrovat cestu mířící do
+    // složky oběti. Aplikace i DB (enforce_photo_path) to musí odmítnout.
+    const VICTIM = "999e4567-e89b-12d3-a456-426614174000";
+    expect(isValidPhotoPath(`${VICTIM}/${PRES}/${FILE}.jpg`, USER, PRES)).toBe(false);
+    expect(isValidPhotoPath(`${USER}/${PRES}/${FILE}.svg`, USER, PRES)).toBe(false); // ani „obrázkový" SVG
+  });
 });

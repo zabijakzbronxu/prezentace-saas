@@ -170,13 +170,17 @@ export default async function ListingPage({
 
   // Podepsané odkazy fungují pro vlastníka (koncept) i pro veřejnost
   // (publikovaná) — rozhodují Storage policies.
+  // U KONCEPTU dáváme odkazům krátkou platnost (5 min) — kdyby se náhledový
+  // odkaz omylem dostal ven, rychle zhasne. Publikovaná stránka je veřejná
+  // tak jako tak, tam vydrží hodinu. (revize 2026-07, nález „signed URL")
+  const signedTtlSeconds = isPreview ? 5 * 60 : 60 * 60;
   const signedUrls = new Map<string, string>();
   if (photos.length > 0) {
     const { data: signed, error: signError } = await supabase.storage
       .from(PHOTOS_BUCKET)
       .createSignedUrls(
         photos.map((ph) => ph.storage_path),
-        60 * 60,
+        signedTtlSeconds,
       );
     if (signError || !signed) {
       console.error("[listing] podepsané odkazy selhaly:", signError?.message);

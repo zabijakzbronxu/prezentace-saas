@@ -23,10 +23,15 @@ export async function deletePresentation(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!isUuid(id)) redirect("/presentations");
 
-  const { data: photos } = await supabase
+  const { data: photos, error: photosError } = await supabase
     .from("presentation_photos")
     .select("storage_path")
     .eq("presentation_id", id);
+  if (photosError) {
+    // Nezastavíme mazání prezentace kvůli úklidu fotek — jen ať je v logu,
+    // že soubory ve Storage možná zůstanou (osiřelé, v privátním bucketu).
+    console.error("[presentations] načtení fotek před smazáním selhalo:", photosError.message);
+  }
 
   const { data: deleted, error } = await supabase
     .from("presentations")

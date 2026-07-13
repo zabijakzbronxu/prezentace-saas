@@ -173,3 +173,77 @@ souhlas s dostavbou „Zapomenutého hesla" (dnes neexistuje!) · tvůj admin
 e-mail · schválení BACKUP.md + tarif Supabase · souhlas s instalací
 Stripe CLI · a hlavně kroky 1–3 a 5 výše (npm ci, migrace, bucket, push),
 bez kterých se mise nerozjede.
+
+---
+
+# Doplněk 2026-07-13 — Revize průvodce (E2.x) + oprava nálezů
+
+Proběhla **nezávislá revize** celého průvodce a veřejné stránky (poprvé — dosud
+ji nikdo nezkontroloval) + křížová revize Codexem. Plné výsledky v `REVIEW_2026_07.md`.
+**Dobrá zpráva:** nikdo cizí nemůže číst/měnit tvoje data ani publikovat bez
+zaplacení — hlavní hráze drží. Opravil jsem 8 nálezů (2 vážnější + 2 střední +
+4 drobné). Většina se týkala **úložiště fotek**.
+
+## Stav nasazení (co běží a co ne) — přečti nejdřív
+
+Nevidím do tvého živého Supabase, takže tohle je podle toho, co je v projektu.
+**Ověř si a doplň, co ještě neběží:**
+
+- **Migrace v projektu: 10 souborů.** Prvních 5 (init, property_type, backfill,
+  checks_and_publish_guard, — ta „stará" várka) jsi spouštěl dřív. Dalších 5
+  (`text_sections`, `contact_checks`, `profile_checks`, `photos_integrity`,
+  `status_slug_guard`) byl krok „2." z tohoto dokumentu výše — **pokud jsi je
+  ještě nespustil, spusť je teď.** Bez posledních dvou nefungují fotky.
+- **NOVÁ migrace z revize:** `20260713220000_review_2026_07_hardening.sql` —
+  **ještě není aplikovaná** (vznikla teď). Spustit (viz níže).
+- **Storage bucket `presentation-photos`:** pokud jsi ho ještě nezaložil podle
+  `storage-setup.md`, fotky nejdou nahrát. Návod na bucket jsem po revizi
+  **zpřísnil** — spusť SQL blok znovu (viz níže).
+- **Platby:** viz „Blokující díra" na konci — Stripe tok zatím vůbec neexistuje.
+
+## Udělej v tomhle pořadí (~10 minut)
+
+### 1. Spustit novou migraci
+`supabase.com/dashboard` → tvůj projekt → **SQL Editor** → **New query** → zkopíruj
+a spusť obsah `app/supabase/migrations/20260713220000_review_2026_07_hardening.sql`.
+Musí skončit **Success**. (Jde spustit i opakovaně. Přidává DB pojistku tvaru cesty
+k fotce, zafixuje `search_path` a tvrdě zakáže zápis do plateb běžným uživatelům.)
+
+### 2. Znovu spustit SQL pro úložiště (zpřísněné)
+V SQL Editoru spusť **znovu** celý blok z `app/supabase/storage-setup.md` (cesta A).
+Po revizi navíc: (a) sám nastaví bucketu limit velikosti a povolené typy (ať to
+nezávisí jen na klikání), (b) upload pravidlo nově dovolí nahrát **jen do vlastní,
+existující prezentace**. Skript staré verze sám nahradí.
+
+### 3. Ověřit v prohlížeči (že nahrávání pořád funguje)
+`npm run dev` → přihlas se → **Moje prezentace** → prezentace → **2. Fotky** →
+nahraj 2–3 JPEG/PNG. Musí projít (náhledy, první = hlavní). Zkus smazat a posunout
+šipkami. Když nahrání hlásí chybu s cestou/prezentací, napiš mi — doladíme policy.
+
+### 4. Rychlá kontrola bezpečí (nepovinné, ale doporučené)
+V SQL Editoru spusť dva dotazy z `checks/security-check.md` (sekce „Ověření nasazení
+úložiště"). Bucket musí být `public = false`, `file_size_limit = 8388608`,
+typy `{image/jpeg,image/png,image/webp}`, a musí existovat všechna 4 pravidla.
+
+### 5. Testy a build (u tebe)
+`cd ~/Desktop/prezentace-saas/app && npm ci && npm test && npm run build` — testy
+**35 passed**, build bez chyby. (Já ověřil: 35/35 testů zelené, typová kontrola
+čistá, build projde — v mém prostředí padal jen na stažení Google Fonts, což u tebe
+funguje.)
+
+### 6. Push
+Až budeš spokojený: `git push` (klidně přes `PUSH_GITHUB.command`).
+**Já jsem commitnul, ale NEpushnul** — push je tvůj vědomý krok.
+
+## ⚠ Blokující díra — SaaS zatím NEMŮŽE vydělávat (nález M3 / Codex Medium 4)
+
+Databázová brzda „bez zaplacení nezveřejníš" **funguje a drží**. ALE v kódu
+**vůbec neexistuje platební tok**: žádná Stripe závislost, žádné checkout tlačítko,
+žádná webhook route, nic nikdy nevytvoří zaplacenou platbu. Prakticky:
+**nikdo nemůže zaplatit, tím pádem nikdo nemůže publikovat → produkt nevydělává.**
+
+Tohle je záměrně **neopravené** (je to celý úkol E3.9 Stripe, ne drobnost). Až se
+do něj pustíme, musí: bezpečně a **idempotentně** vytvořit `payments.status='paid'`,
+ověřit **podpis** webhooku, a cenu brát ze serveru (nikdy z prohlížeče). Do backlogu
+patří jako **blokující pro spuštění**. Přidej k úkolu E3.9 (nebo mi řekni a přidám
+konektorem, až pojede).

@@ -30,6 +30,11 @@ srozumitelnou hlášku a nic se nerozbije — ale fotky nepůjdou nahrát.
    **⋮ / Edit bucket** (nastavení) a limit + MIME typy doplň tam.
    **Bez těchto dvou limitů úložiště nezapínej.**
 
+> Pojistka (revize 2026-07): SQL blok v Kroku 2 (cesta A) teď limit velikosti
+> i povolené typy **nastaví sám** (příkaz `insert into storage.buckets … on
+> conflict do update`). I když je omylem vyplníš špatně nebo vynecháš,
+> spuštění SQL je srovná. Když jedeš jen ruční cestu B, nastav je podle bodu 3.
+
 ## Krok 2 — bezpečnostní pravidla (policies)
 
 Zkus nejdřív cestu A (rychlejší). Když skončí chybou, použij cestu B.
@@ -44,9 +49,24 @@ Musí skončit **Success**. Skript jde spustit i opakovaně, nic nerozbije.
 -- Cesta souboru: <id_vlastníka>/<id_prezentace>/<náhodné_jméno>.jpg|png|webp
 -- „První složka = ID vlastníka" je základ všech pravidel.
 
+-- (0) POJISTKA nastavení bucketu přímo v SQL — ať limit velikosti a povolené
+--     typy nezávisí jen na dvou políčkách v dashboardu (revize 2026-07).
+--     Bez `allowed_mime_types` by šlo přímým voláním Storage API nahrát
+--     podvržený soubor (HTML/SVG) a nechat ho servírovat jako stránku.
+--     `on conflict do update` = když bucket už existuje, jen mu srovná nastavení.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('presentation-photos', 'presentation-photos', false, 8388608,
+        array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do update
+  set public = false,
+      file_size_limit = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
+
 -- Nahrávat smí jen přihlášený, jen do SVÉ složky, a jen soubory
 -- ve tvaru <moje_id>/<id_prezentace>/<náhodné_jméno>.jpg|png|webp
--- (žádné vymyšlené cesty ani jiné typy souborů).
+-- (žádné vymyšlené cesty ani jiné typy souborů) — a jen k prezentaci,
+-- která existuje a patří jemu (jinak by šlo skriptem plnit úložiště
+-- do složek s vymyšlenými/cizími ID prezentací; nález revize 2026-07).
 drop policy if exists "photos owner upload" on storage.objects;
 create policy "photos owner upload" on storage.objects
   for insert to authenticated
@@ -56,6 +76,11 @@ create policy "photos owner upload" on storage.objects
     and array_length(storage.foldername(name), 1) = 2
     and (storage.foldername(name))[2] ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
     and name ~* '\.(jpg|png|webp)$'
+    and exists (
+      select 1 from public.presentations p
+      where p.id = ((storage.foldername(name))[2])::uuid
+        and p.owner_id = auth.uid()
+    )
   );
 
 -- Číst smí vlastník svoje soubory (kvůli náhledům v editaci).

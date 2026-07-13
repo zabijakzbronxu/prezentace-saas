@@ -138,7 +138,7 @@ export async function movePhoto(formData: FormData) {
   const photo = await loadOwnPhoto(supabase, String(formData.get("photo_id") ?? ""));
   if (!photo || (direction !== "up" && direction !== "down")) redirect("/presentations");
 
-  const { data: neighbor } = await supabase
+  const { data: neighbor, error: neighborError } = await supabase
     .from("presentation_photos")
     .select("id")
     .eq("presentation_id", photo.presentation_id)
@@ -146,6 +146,13 @@ export async function movePhoto(formData: FormData) {
     .order("sort_order", { ascending: direction === "down" })
     .limit(1)
     .maybeSingle();
+
+  // Skutečná chyba dotazu NENÍ totéž co „na kraji galerie" (kde je neighbor
+  // prázdný záměrně). Bez téhle větve by se chyba tvářila jako úspěch.
+  if (neighborError) {
+    console.error("[photos] hledání sousední fotky selhalo:", neighborError.message);
+    backToPhotos(photo.presentation_id, "move-failed");
+  }
 
   // Na kraji galerie není s čím prohodit — v pořádku, jen se nic nestane.
   if (neighbor) {
