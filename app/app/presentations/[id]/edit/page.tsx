@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { isUuid } from "@/lib/presentations/form";
+import { isMissingSchemaError } from "@/lib/db-errors";
+import { SchemaErrorScreen } from "../../../schema-error";
 import { updatePresentation } from "./actions";
 import { wrap, card, SuccessBox, WizardNav, PreviewLink } from "../../ui";
 import { BasicFieldsForm } from "../../basic-form";
@@ -38,6 +40,9 @@ export default async function EditPresentationPage({
 
   if (loadError) {
     console.error("[presentations/edit] načtení selhalo:", loadError.message);
+    if (isMissingSchemaError(loadError)) {
+      return <SchemaErrorScreen detail={loadError.message} />;
+    }
   }
   if (!p) {
     return (

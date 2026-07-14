@@ -27,6 +27,35 @@ Fakta a rozhodnutí, která musí přežít mezi konverzacemi. Co tu není zapsa
 - Kontakt prodávajícího (dokončení E2.6): vyplňuje se v kroku 3 (Texty), volitelný; validace: e-mail základní tvar, telefon ≥ 6 číslic, délky 120/200/30 (+ DB CHECK `20260706150000_contact_checks.sql`). Na veřejné stránce karta s CTA Zavolat / Napsat e-mail; bez kontaktu se sekce skryje.
 - ClickUp konektor nebyl v session 2026-07-06 dostupný → stav E2.5/E2.6 v backlogu aktualizuje Karel ručně (viz `tasks/kroky-pro-karla.md`).
 
+## Rozhodnutí (2026-07-14, E3.9 Stripe platby) — defaulty zvolené AI, čekají na potvrzení Karla
+
+- **Cena je konfigurace, ne kód:** `PUBLISH_PRICE_CZK` (výchozí 490 Kč), `PUBLISH_PRODUCT_NAME`.
+  Měna CZK napevno — je **dvoudecimální** (490 Kč = `unit_amount: 49000` haléřů) a
+  Stripe neúčtuje míň než **15 Kč**. Cena se bere VÝHRADNĚ ze serveru.
+- **Publikace se odemyká JEN webhookem** (`/api/stripe/webhook`), nikdy podle návratové
+  URL z prohlížeče (dá se podvrhnout). Návratová stránka jen čeká a čte stav z DB.
+  Záchranná brzda: tlačítko „Ověřit platbu" → serverový dotaz PŘÍMO Stripu (ne prohlížeči),
+  používá stejnou funkci `fulfillSession` jako webhook.
+- **Idempotence** stojí na tabulce `stripe_events` (`event_id` = PRIMARY KEY): webhook si
+  událost na začátku „zamkne"; při selhání zámek UVOLNÍ (jinak by Stripe retry přeskočil
+  a platba by se tiše ztratila). Druhá vrstva: partial unique indexy na `payments`
+  (jedna session, jedna rozdělaná a jedna zaplacená platba na prezentaci).
+- **Refund → prezentace zpět na `draft`** (trigger `unpublish_when_unpaid` v DB, ne jen
+  v aplikaci). Důvod: „zaplaceno = zveřejněno" je obchodní model; jinak by šlo zaplatit,
+  nechat zveřejnit a požádat o vrácení peněz → inzerát zdarma. Data se nemažou.
+- **Průvodce má nově 4. krok „Zveřejnit"** (Základ → Fotky → Texty → Zveřejnit).
+- Poslouchané události: `checkout.session.completed`, `…async_payment_succeeded`,
+  `…async_payment_failed`, `…expired`, `refund.created`. POZOR: `completed` sám o sobě
+  NEZNAMENÁ zaplaceno — u odložených metod přijde s `payment_status: unpaid`.
+- Nové env proměnné: `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+  `NEXT_PUBLIC_SITE_URL` (na produkci POVINNÁ — jinak jde podvrhnout návratovou adresu),
+  `PUBLISH_PRICE_CZK`, `PUBLISH_PRODUCT_NAME`.
+- Do `payments` smí zapisovat **jen service_role** (`lib/supabase/admin.ts`) — RLS + REVOKE.
+- stripe-node: verze **zamčená v package.json**, `apiVersion` se schválně NEUVÁDÍ
+  (typ je zúžený na literál nejnovější verze → hardcode by shodil typovou kontrolu při upgradu).
+- ⚠️ **Stav 2026-07-14: kód napsaný, ale STROJOVĚ NEOVĚŘENÝ** (sandboxu došlo místo na disku
+  → nešly testy, build ani commit). Ověření a commit jsou na Karlovi, viz `tasks/kroky-pro-karla.md`.
+
 ## Technická poznámka (prostředí Cowork)
 
 - Sandbox v Cowork neumí mazat gitové `.lock` soubory na Desktopu → po každé git operaci zůstane stale `index.lock`. Řešení: přesunout ho stranou souborovým nástrojem (move na `*.stale`) před další git operací. V Claude Code (nativně) tento problém nebude.

@@ -78,13 +78,41 @@ export function PhotoUploader({
         .upload(path, file, { contentType: mime, upsert: false });
 
       if (uploadError) {
-        const notFound = /bucket not found/i.test(uploadError.message);
-        problems.push(
-          notFound
-            ? "Úložiště fotek ještě není zapnuté (chybí bucket v Supabase — krok pro Karla)."
-            : `„${file.name}": nahrání se nepovedlo (${uploadError.message}).`,
-        );
-        if (notFound) break; // bez bucketu nemá smysl zkoušet další
+        // Rozlišujeme tři různé příčiny — dřív všechny skončily jako holá
+        // hláška ze Supabase, ze které nebylo poznat, co s tím dělat.
+        const msg = uploadError.message;
+        const noBucket = /bucket not found/i.test(msg);
+        // Pozor: samotné „Unauthorized" tu NEHLEDÁME — to je vypršelé přihlášení,
+        // ne chybějící policy, a poslat kvůli tomu Karla do SQL Editoru je špatná rada.
+        const noPolicy = /row-level security|new row violates/i.test(msg);
+        const badBucketLimits =
+          /mime type .* is not supported|exceeded the maximum allowed size/i.test(msg);
+
+        if (noBucket) {
+          problems.push(
+            "Úložiště fotek není zapnuté — v Supabase chybí bucket presentation-photos. " +
+              "Spusť app/supabase/APLIKUJ_VSE.sql v Supabase → SQL Editor.",
+          );
+          break; // bez bucketu nemá smysl zkoušet další
+        }
+
+        if (noPolicy) {
+          problems.push(
+            "Úložiště fotek odmítlo soubor — chybí (nebo neprošla) bezpečnostní pravidla Storage. " +
+              "Spusť app/supabase/APLIKUJ_VSE.sql v Supabase → SQL Editor.",
+          );
+          break; // bez policy dopadnou stejně všechny další
+        }
+
+        if (badBucketLimits) {
+          problems.push(
+            "Bucket má špatně nastavené limity (povolené typy nebo velikost souboru). " +
+              "Spusť app/supabase/APLIKUJ_VSE.sql v Supabase → SQL Editor, ten je srovná.",
+          );
+          break; // špatné limity odmítnou i všechny další fotky
+        }
+
+        problems.push(`„${file.name}": nahrání se nepovedlo (${msg}).`);
         continue;
       }
 

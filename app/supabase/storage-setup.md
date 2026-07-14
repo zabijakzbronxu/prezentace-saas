@@ -1,5 +1,10 @@
 # Úložiště fotek (E2.5) — zapnutí bucketu v Supabase (dělá Karel, ~5 minut)
 
+> **Zkratka:** všechno níže (bucket i pravidla) je od 2026-07-14 součástí
+> **`app/supabase/APLIKUJ_VSE.sql`**. Když spustíš ten, úložiště se zapne samo
+> a tenhle návod nepotřebuješ. Zůstává tu jako vysvětlení „jak je to vymyšlené"
+> a jako **cesta B** pro projekty, kde SQL na `storage.*` neprojde.
+
 Fotky prezentací se ukládají do Supabase **Storage** (úložiště souborů).
 V databázi je jen „adresa" souboru; samotný soubor bydlí v tzv. **bucketu**
 (přihrádce). Dokud bucket nevznikne, nahrávání fotek v aplikaci vypíše

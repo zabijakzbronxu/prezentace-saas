@@ -247,3 +247,288 @@ do něj pustíme, musí: bezpečně a **idempotentně** vytvořit `payments.stat
 ověřit **podpis** webhooku, a cenu brát ze serveru (nikdy z prohlížeče). Do backlogu
 patří jako **blokující pro spuštění**. Přidej k úkolu E3.9 (nebo mi řekni a přidám
 konektorem, až pojede).
+
+> **AKTUALIZACE 2026-07-14: díra je zalátaná — platební tok je postavený.**
+> Viz nová sekce níž.
+
+---
+
+# 2026-07-14 — STRIPE PLATBY (E3.9). Co udělat, ať se dá zaplatit
+
+## Nejdřív poctivé přiznání
+
+**Nespustil jsem testy ani build.** Linuxovému prostředí, ve kterém příkazy pouštím,
+došlo v půlce práce místo na disku a už se vůbec nenastartovalo. Nešly proto ani
+git commity.
+
+Takže: **kód je hotový a napsaný na disk, ale strojově NEOVĚŘENÝ.** Nebudu ti
+tvrdit, že je zeleno, když jsem to neviděl. Prošel jsem si to znovu čtením a našel
+a opravil 5 věcí, ale to není náhrada za testy. **První krok níž je proto ověření
+u tebe** — a než projde, ber E3.9 jako „hotové, neověřené".
+
+## 0. Ověření a commit (musíš spustit ty) — 5 minut
+
+Otevři Terminál a vlož postupně:
+
+```
+cd ~/Desktop/prezentace-saas/app
+npm install
+npm test
+npm run typecheck
+npm run lint
+npm run build
+```
+
+- `npm install` — doinstaluje dvě nové knihovny (`stripe`, `server-only`) a přepíše
+  `package-lock.json`. Bez toho nic dalšího nepojede.
+- `npm test` — mělo by být **55 passed** (35 původních + 20 nových na platby,
+  hlavně na idempotenci webhooku). **Pokud to nesedí nebo něco spadne, pošli mi
+  celý výpis — opravím to.**
+- `npm run typecheck` a `npm run lint` a `npm run build` — musí projít bez chyby.
+
+Až bude všechno zelené, ulož práci do gitu (já jsem nemohl):
+
+```
+cd ~/Desktop/prezentace-saas
+git add -A
+git commit -m "E3.9: Stripe Checkout + idempotentní webhook, publikace jen po zaplacení"
+```
+
+**NEPUSHUJ**, dokud si to neproklikáš (krok 6). Push je pořád tvůj vědomý krok.
+
+## 1. Založ si Stripe účet — 10 minut
+
+1. Jdi na `stripe.com` → **Start now / Sign up**, založ účet na svůj e-mail.
+2. Účet se rovnou otevře v **testovacím režimu** (Stripe mu dnes říká „sandbox").
+   V testovacím režimu se **nepohnou žádné skutečné peníze** — přesně to teď chceme.
+3. Ostrý režim (skutečné platby) vyžaduje vyplnit údaje o firmě, bankovní účet a
+   ověření totožnosti. **Tohle zatím NEDĚLEJ** — nejdřív si celý nákup vyzkoušíme
+   nanečisto. Ostrý režim zapneme, až bude jisté, že to funguje.
+
+## 2. Vezmi si klíče — 3 minuty
+
+1. Ve Stripu vlevo dole **Developers** → **API keys**
+   (přímý odkaz: `dashboard.stripe.com/test/apikeys`).
+2. Zkontroluj, že jsi v **testovacím režimu** (přepínač nahoře).
+3. Zkopíruj **Secret key** — začíná `sk_test_…` (klikni „Reveal test key").
+
+> **Klíč nikomu neposílej a nedávej do žádného souboru, který jde do gitu.**
+> Patří jen do `.env.local` (ten je v `.gitignore`) a do nastavení Vercelu.
+> Kdyby ti někdy unikl, ve Stripu ho jde jedním kliknutím zneplatnit („Roll key").
+
+Ostrý klíč (`sk_live_…`) je na stejné stránce po přepnutí do ostrého režimu —
+ten budeš potřebovat až na konci, při spuštění naostro.
+
+## 3. Vezmi si ze Supabase servisní klíč — 2 minuty
+
+Platbu do databáze zapisuje server, ne prohlížeč — a k tomu potřebuje zvláštní klíč.
+
+1. `supabase.com/dashboard` → tvůj projekt → **Project Settings** → **API Keys**
+2. Zkopíruj **`service_role`** klíč (bude schovaný pod „Reveal").
+
+> Tenhle klíč **obchází veškerá bezpečnostní pravidla databáze**. Je z celého
+> projektu ten nejcitlivější. Nikdy ho nedávej nikam do prohlížeče, do kódu ani
+> do gitu — jen do `.env.local` a do Vercelu.
+
+## 4. Spusť novou migraci databáze — 3 minuty
+
+`supabase.com/dashboard` → tvůj projekt → **SQL Editor** → **New query** → zkopíruj
+a spusť (**Run**) celý obsah souboru:
+
+```
+app/supabase/migrations/20260714120000_stripe_payments.sql
+```
+
+Musí skončit **Success**. (Jde spustit i opakovaně, nic nerozbije.)
+
+Co ta migrace dělá, laicky:
+- přidá k platbám kolonky pro Stripe,
+- **zaručí, že jedna platba nemůže být započtená dvakrát** (i kdyby Stripe poslal
+  tutéž zprávu dvakrát — což dělá běžně),
+- **zaručí, že na jednu prezentaci může běžet jen jeden nákup** (ochrana proti
+  dvojkliku),
+- a přidá pravidlo: **když se peníze vrátí, prezentace se zase schová** (viz níž).
+
+## 5. Vyplň si to lokálně — 5 minut
+
+V souboru `app/.env.local` (pokud neexistuje, zkopíruj `app/.env.local.example`
+a přejmenuj na `.env.local`) doplň:
+
+```
+SUPABASE_SERVICE_ROLE_KEY=  ← ze Supabase (krok 3)
+STRIPE_SECRET_KEY=sk_test_…  ← ze Stripu (krok 2)
+STRIPE_WEBHOOK_SECRET=whsec_…  ← dostaneš v kroku 6
+PUBLISH_PRICE_CZK=490
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+```
+
+`NEXT_PUBLIC_SUPABASE_URL` a `NEXT_PUBLIC_SUPABASE_ANON_KEY` už tam z dřívějška máš.
+
+## 6. Vyzkoušej si nákup nanečisto — 15 minut
+
+Tohle je ta nejdůležitější část. **Potřebuješ Stripe CLI** — malý program, který
+při vývoji doručuje zprávy ze Stripu na tvůj počítač.
+
+**a) Nainstaluj Stripe CLI** (jednorázově):
+
+```
+brew install stripe/stripe-cli/stripe
+stripe login
+```
+
+`stripe login` otevře prohlížeč a poprosí o potvrzení. Odsouhlas.
+
+**b) Pusť tři věci, každou ve VLASTNÍM okně terminálu:**
+
+Okno 1 — aplikace:
+```
+cd ~/Desktop/prezentace-saas/app
+npm run dev
+```
+
+Okno 2 — doručovatel zpráv ze Stripu:
+```
+stripe listen --forward-to localhost:3000/api/stripe/webhook
+```
+Vypíše řádek `Your webhook signing secret is whsec_…` — **tenhle `whsec_…` zkopíruj
+do `app/.env.local`** jako `STRIPE_WEBHOOK_SECRET` a **v okně 1 restartuj** `npm run dev`
+(Ctrl+C a znovu). Okno 2 nech běžet.
+
+**c) Nakup:**
+
+1. V prohlížeči `http://localhost:3000` → přihlas se → **Moje prezentace**
+2. U prezentace klikni **Zveřejnit** (nově je to **4. krok** průvodce)
+3. Uvidíš cenu 490 Kč → klikni **Zveřejnit a zaplatit 490 Kč**
+4. Přesměruje tě to na platební stránku Stripu (bude česky). Vyplň:
+   - **číslo karty: `4242 4242 4242 4242`** (testovací karta „vždy projde")
+   - datum expirace: cokoli v budoucnu (např. `12/30`)
+   - CVC: cokoli trojmístné (např. `123`)
+   - jméno a PSČ: cokoli
+5. Zaplať → vrátí tě to zpět na stránku **„Platba se zpracovává…"**
+6. **Do pár vteřin se sama přepne na „Hotovo — prezentace je venku 🎉"** a ukáže
+   veřejný odkaz.
+
+**Co si u toho ověř:**
+- V okně 2 (`stripe listen`) proběhne řádek `checkout.session.completed … [200]`
+- Prezentace má v „Moje prezentace" štítek **Publikováno**
+- Veřejný odkaz `/listing/<slug>` **otevřeš i v anonymním okně** (bez přihlášení) —
+  a uvidíš ho. To dřív nešlo.
+
+**d) Vyzkoušej i to, co se může pokazit:**
+
+- **Zrušení platby:** klikni Zveřejnit → na Stripu klikni šipku zpět → vrátí tě to
+  s hláškou „Platbu jsi nedokončil(a) — nic jsme ti neúčtovali". Prezentace zůstává
+  konceptem. ✔
+- **Zamítnutá karta:** zkus kartu `4000 0000 0000 0002` → platba neprojde,
+  nic se nezveřejní. ✔
+- **Dvojklik:** klikni na „Zveřejnit a zaplatit" a hned znovu → nesmí vzniknout dvě
+  platby (tlačítko se samo vypne a v databázi to hlídá pojistka).
+
+## 7. Nastav to na ostro (Vercel + Stripe webhook) — 15 minut
+
+Tohle dělej, **až budeš spokojený s testem** a až budeš mít ostré Stripe klíče.
+
+**a) Proměnné ve Vercelu:**
+
+Vercel → tvůj projekt → **Settings** → **Environment Variables** → přidej
+(prostředí: **Production**, případně i Preview):
+
+| Název | Hodnota |
+|---|---|
+| `SUPABASE_SERVICE_ROLE_KEY` | servisní klíč ze Supabase |
+| `STRIPE_SECRET_KEY` | `sk_live_…` (nebo `sk_test_…`, pokud chceš i na webu zatím nanečisto) |
+| `STRIPE_WEBHOOK_SECRET` | `whsec_…` z bodu b) níž |
+| `PUBLISH_PRICE_CZK` | `490` |
+| `PUBLISH_PRODUCT_NAME` | `Zveřejnění prezentace nemovitosti` |
+| `NEXT_PUBLIC_SITE_URL` | tvoje skutečná adresa, např. `https://prodej-si-sam.vercel.app` |
+
+`NEXT_PUBLIC_SUPABASE_URL` a `NEXT_PUBLIC_SUPABASE_ANON_KEY` už tam máš.
+
+> `NEXT_PUBLIC_SITE_URL` je na ostro **povinná**. Bez ní by se dala návratová
+> adresa po platbě podvrhnout na cizí web.
+
+**b) Webhook endpoint ve Stripu:**
+
+1. Stripe dashboard → **Developers** → **Webhooks**
+   (`dashboard.stripe.com/webhooks`)
+2. **Add endpoint** (dnes se to může jmenovat „Create an event destination")
+3. **Endpoint URL:** `https://TVOJE-ADRESA/api/stripe/webhook`
+4. **Vyber události** — přesně těchhle pět:
+   - `checkout.session.completed`
+   - `checkout.session.async_payment_succeeded`
+   - `checkout.session.async_payment_failed`
+   - `checkout.session.expired`
+   - `refund.created`
+5. Ulož → u endpointu klikni na **Signing secret** → **Reveal** → zkopíruj `whsec_…`
+   → vlož do Vercelu jako `STRIPE_WEBHOOK_SECRET` → **znovu nasaď** (Redeploy).
+
+> **Tohle je nejdůležitější krok celého nastavení.** Bez správně nastaveného
+> webhooku zákazník zaplatí, ale prezentace se nezveřejní. (Máme sice záchrannou
+> brzdu — tlačítko „Ověřit platbu" na návratové stránce, které se zeptá Stripu
+> přímo — ale spoléhat se na ni nechceme.)
+
+**c) Zkontroluj, že webhook chodí:** ve Stripu u endpointu je záložka
+**Event deliveries** — po prvním nákupu tam musí být zelené `200`.
+
+---
+
+## Jak to celé funguje (laicky, ať víš, čemu věříme)
+
+Uživatel klikne **Zveřejnit** → my u Stripu založíme platbu a pošleme ho na jeho
+platební stránku → zaplatí → vrátí se k nám.
+
+**Ale:** to, že se prohlížeč vrátil, pro nás **neznamená vůbec nic** — takovou adresu
+si může kdokoli napsat sám a publikovat bez placení. Proto návratová stránka jenom
+řekne „platba se zpracovává" a čeká.
+
+Zveřejnit smí jedině **zpráva od Stripu poslaná přímo na náš server** (webhook),
+která nese **podpis** — a ten umí vyrobit jen Stripe, protože zná tajný klíč.
+Bez platného podpisu zprávu zahodíme.
+
+A protože Stripe tutéž zprávu občas pošle dvakrát, vedeme si **knihu už zpracovaných
+zpráv**. Druhé doručení té samé zprávy prostě přeskočíme — nikdo nezaplatí dvakrát.
+
+## Co jsem rozhodl za tebe (a proč) — řekni, jestli souhlasíš
+
+1. **Cena 490 Kč** — jen výchozí hodnota, ať se dá vůbec testovat. Není nikde v kódu,
+   je to nastavení (`PUBLISH_PRICE_CZK`). **Změníš ji sám, bez programátora.**
+   Minimum je 15 Kč (pod to Stripe neúčtuje).
+2. **Po zaplacení se prezentace zveřejní sama** (žádné další tlačítko). Vyplývá to
+   z toho, jak jsi to popsal: „klikne Zveřejnit → zaplatí → vrátí se". Kdybys chtěl,
+   ať po zaplacení ještě čeká na potvrzení, řekni — je to malá změna.
+3. **Vrácení peněz = prezentace se schová zpět do konceptu.** ← **Tohle je
+   nejdůležitější rozhodnutí, potvrď ho.**
+   *Proč:* zaplaceno = zveřejněno je celý náš obchodní model. Kdyby po vrácení peněz
+   zůstala prezentace veřejně viset, dal by se produkt používat zdarma (zaplatit,
+   nechat zveřejnit, požádat o vrácení peněz, inzerát běží dál). Zamkl jsem to
+   **přímo v databázi**, ne jen v aplikaci — takže to drží, i kdyby se v kódu něco
+   pokazilo. Peníze uživateli vracíš ty, ručně, ze Stripe dashboardu; prezentace
+   zmizí z veřejné adresy sama do pár vteřin. Data se **nemažou** — zůstane koncept
+   a jde ho znovu zveřejnit novou platbou.
+   *Kdybys chtěl jinak* (např. „vracím peníze, ale inzerát nechávám doběhnout"),
+   řekni — jde to změnit.
+4. **„Zveřejnit" je nový 4. krok průvodce** (Základ → Fotky → Texty → **Zveřejnit**)
+   a přibyl i jako tlačítko v „Moje prezentace" u nepublikovaných. Sedí?
+5. **Zveřejnit jde i prezentaci bez fotek** — jen na to slušně upozorníme.
+   Nebránil jsem v tom. Chceš to zakázat?
+6. **Opuštěný nákup propadne po hodině** a uživatel může zkusit znovu.
+
+## Co se může pokazit a jak to poznáš
+
+- **Zákazník zaplatí a nic se nezveřejní** → skoro jistě špatně nastavený webhook
+  (krok 7b). Poznáš to ve Stripu: **Developers → Webhooks → Event deliveries** budou
+  červené. Zákazník má záchranu: tlačítko **„Ověřit platbu"** na návratové stránce
+  se zeptá Stripu přímo a zveřejní to.
+- **Nejde spustit platba** („Platby zatím nejsou nastavené") → chybí některý klíč
+  v prostředí. Zkontroluj `STRIPE_SECRET_KEY` a `SUPABASE_SERVICE_ROLE_KEY`.
+- **Rollback kódu:** `git log --oneline` a `git revert <číslo commitu>`.
+- **Rollback migrace:** nová migrace jen *přidává* pojistky, nic nemaže. Kdyby vadila,
+  poradíme se — ruční mazání unikátních indexů dělat nechceš.
+
+## ⚠ Co jsem NEudělal
+
+- **Neověřil jsem to strojově** (testy/build/lint) — viz krok 0. To je na tobě.
+- **Neproklikal jsem to v prohlížeči** — nemám tvoje Stripe klíče ani databázi.
+  Skutečné „hotovo" je až po kroku 6.
+- **Necommitnul jsem** — příkaz je v kroku 0.
+- **Nepushnul jsem.**

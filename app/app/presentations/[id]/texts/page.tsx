@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { isUuid } from "@/lib/presentations/form";
+import { isMissingSchemaError } from "@/lib/db-errors";
+import { SchemaErrorScreen } from "../../../schema-error";
 import { wrap, card, SuccessBox, WizardNav, PreviewLink } from "../../ui";
 import { TextsForm } from "./form";
 
@@ -36,6 +38,11 @@ export default async function PresentationTextsPage({
 
   if (loadError) {
     console.error("[presentations/texts] načtení selhalo:", loadError.message);
+    // Chybějící sloupec (např. location_text) NENÍ „prezentace nenalezena".
+    // Řekni to nahlas, ať uživatel neluští prázdnou stránku.
+    if (isMissingSchemaError(loadError)) {
+      return <SchemaErrorScreen detail={loadError.message} />;
+    }
   }
   if (!p) {
     return (

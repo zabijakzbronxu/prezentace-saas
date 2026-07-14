@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { isUuid } from "@/lib/presentations/form";
 import { PHOTOS_BUCKET } from "@/lib/photos";
+import { isMissingSchemaError } from "@/lib/db-errors";
+import { SchemaErrorScreen } from "../../../schema-error";
 import { wrap, card, smallBtn, ErrorBox, SuccessBox, WizardNav, PreviewLink } from "../../ui";
 import { ConfirmSubmit } from "../../confirm-submit";
 import { PhotoUploader } from "./uploader";
@@ -16,6 +18,9 @@ const ERROR_TEXT: Record<string, string> = {
   "delete-failed": "Smazání fotky se nepovedlo, zkus to znovu.",
   "move-failed": "Změna pořadí se nepovedla, zkus to znovu.",
   "hero-failed": "Nastavení hlavní fotky se nepovedlo, zkus to znovu.",
+  // Nedorovnaná databáze — opakovaný pokus by dopadl stejně, tak to řekni rovnou.
+  schema:
+    "Databáze není dorovnaná — chybí v ní funkce pro práci s fotkami. Spusť v Supabase → SQL Editor soubor app/supabase/APLIKUJ_VSE.sql.",
 };
 
 export default async function PresentationPhotosPage({
@@ -45,6 +50,9 @@ export default async function PresentationPhotosPage({
 
   if (loadError) {
     console.error("[presentations/photos] načtení selhalo:", loadError.message);
+    if (isMissingSchemaError(loadError)) {
+      return <SchemaErrorScreen detail={loadError.message} />;
+    }
   }
   if (!p) {
     return (
@@ -68,6 +76,9 @@ export default async function PresentationPhotosPage({
 
   if (photosError) {
     console.error("[presentations/photos] načtení fotek selhalo:", photosError.message);
+    if (isMissingSchemaError(photosError)) {
+      return <SchemaErrorScreen detail={photosError.message} />;
+    }
   }
   const photos = photosData ?? [];
 
@@ -130,7 +141,7 @@ export default async function PresentationPhotosPage({
         {storageUnavailable ? (
           <ErrorBox>
             Náhledy fotek se nepodařilo načíst. Nejspíš ještě není zapnuté úložiště
-            (bucket v Supabase) — viz „kroky pro Karla".
+            (bucket v Supabase) — viz &bdquo;kroky pro Karla&ldquo;.
           </ErrorBox>
         ) : null}
 
@@ -221,6 +232,7 @@ export default async function PresentationPhotosPage({
                   >
                     <form action={movePhoto}>
                       <input type="hidden" name="photo_id" value={photo.id} />
+                      <input type="hidden" name="presentation_id" value={p.id} />
                       <input type="hidden" name="direction" value="up" />
                       <button type="submit" style={smallBtn} disabled={index === 0} title="Posunout dopředu">
                         ←
@@ -228,6 +240,7 @@ export default async function PresentationPhotosPage({
                     </form>
                     <form action={movePhoto}>
                       <input type="hidden" name="photo_id" value={photo.id} />
+                      <input type="hidden" name="presentation_id" value={p.id} />
                       <input type="hidden" name="direction" value="down" />
                       <button
                         type="submit"
@@ -241,6 +254,7 @@ export default async function PresentationPhotosPage({
                     {!photo.is_hero ? (
                       <form action={setHeroPhoto}>
                         <input type="hidden" name="photo_id" value={photo.id} />
+                        <input type="hidden" name="presentation_id" value={p.id} />
                         <button type="submit" style={smallBtn}>
                           Jako hlavní
                         </button>
@@ -248,6 +262,7 @@ export default async function PresentationPhotosPage({
                     ) : null}
                     <form action={deletePhoto} style={{ marginLeft: "auto" }}>
                       <input type="hidden" name="photo_id" value={photo.id} />
+                      <input type="hidden" name="presentation_id" value={p.id} />
                       <ConfirmSubmit
                         message="Opravdu fotku smazat? Tohle nejde vrátit."
                         style={{ ...smallBtn, color: "#fca5a5", borderColor: "rgba(248,113,113,0.4)" }}

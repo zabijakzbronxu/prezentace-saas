@@ -11,7 +11,13 @@ export type Json =
   | Json[];
 
 export type PresentationStatus = "draft" | "paid" | "published";
-export type PaymentStatus = "pending" | "paid" | "failed" | "refunded";
+// `expired` = opuštěný / propadlý checkout (migrace 20260714120000_stripe_payments.sql)
+export type PaymentStatus =
+  | "pending"
+  | "paid"
+  | "failed"
+  | "refunded"
+  | "expired";
 
 export interface Database {
   public: {
@@ -143,6 +149,12 @@ export interface Database {
           provider_payment_id: string | null;
           paid_at: string | null;
           created_at: string;
+          // Stripe (migrace 20260714120000_stripe_payments.sql)
+          stripe_session_id: string | null;
+          stripe_event_id: string | null;
+          refund_event_id: string | null;
+          refunded_at: string | null;
+          updated_at: string;
         };
         Insert: {
           id?: string;
@@ -154,6 +166,11 @@ export interface Database {
           provider_payment_id?: string | null;
           paid_at?: string | null;
           created_at?: string;
+          stripe_session_id?: string | null;
+          stripe_event_id?: string | null;
+          refund_event_id?: string | null;
+          refunded_at?: string | null;
+          updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["payments"]["Insert"]>;
         Relationships: [
@@ -164,6 +181,24 @@ export interface Database {
             referencedColumns: ["id"];
           },
         ];
+      };
+      // Kniha zpracovaných událostí Stripu — jádro idempotence webhooku.
+      // Píše/čte jen server (service_role); anon i authenticated mají REVOKE.
+      stripe_events: {
+        Row: {
+          event_id: string;
+          type: string;
+          received_at: string;
+          processed_at: string | null;
+        };
+        Insert: {
+          event_id: string;
+          type: string;
+          received_at?: string;
+          processed_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["stripe_events"]["Insert"]>;
+        Relationships: [];
       };
     };
     Views: Record<string, never>;
@@ -196,3 +231,4 @@ export type Presentation = Database["public"]["Tables"]["presentations"]["Row"];
 export type PresentationPhoto =
   Database["public"]["Tables"]["presentation_photos"]["Row"];
 export type Payment = Database["public"]["Tables"]["payments"]["Row"];
+export type StripeEvent = Database["public"]["Tables"]["stripe_events"]["Row"];

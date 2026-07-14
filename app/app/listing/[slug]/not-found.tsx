@@ -29,7 +29,7 @@ export default function ListingNotFound() {
       </h1>
       <p style={{ color: "#646463", maxWidth: "28rem", lineHeight: 1.7 }}>
         Buď neexistuje, nebo ještě nebyla zveřejněna. Pokud je to tvoje prezentace,
-        přihlas se a otevři ji přes „Náhled" v editaci.
+        přihlas se a otevři ji přes &bdquo;Náhled&ldquo; v editaci.
       </p>
       <Link href="/" style={{ color: "#1c1917", textDecoration: "underline" }}>
         ← na úvodní stránku

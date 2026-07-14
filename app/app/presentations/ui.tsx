@@ -132,12 +132,13 @@ const STEPS = [
   { key: "edit", n: 1, title: "Základ" },
   { key: "photos", n: 2, title: "Fotky" },
   { key: "texts", n: 3, title: "Texty" },
+  { key: "publish", n: 4, title: "Zveřejnit" },
 ] as const;
 
 export type WizardStep = (typeof STEPS)[number]["key"];
 
 /**
- * Navigace průvodce: Základ → Fotky → Texty.
+ * Navigace průvodce: Základ → Fotky → Texty → Zveřejnit.
  * Všechny kroky jsou klikací (uložená prezentace už existuje), aktuální je zvýrazněný.
  */
 export function WizardNav({

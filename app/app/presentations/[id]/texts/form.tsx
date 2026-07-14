@@ -5,7 +5,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { MAX, type FormState } from "@/lib/presentations/form";
+import { MAX } from "@/lib/presentations/form";
 import { label, hint, input, textarea, primaryBtn, ErrorBox } from "../../ui";
 import { updateTexts } from "./actions";
 
@@ -103,7 +103,7 @@ export function TextsForm({
         <div>
           <h2 style={{ fontSize: "1.15rem", fontWeight: 700 }}>Kontakt pro zájemce</h2>
           <p style={{ ...hint, marginTop: "0.25rem" }}>
-            Zobrazí se na veřejné stránce s tlačítky „Zavolat" a „Napsat e-mail".
+            Zobrazí se na veřejné stránce s tlačítky &bdquo;Zavolat&ldquo; a &bdquo;Napsat e-mail&ldquo;.
             Dokud kontakt nevyplníš, sekce se zájemcům neukáže — a nemají se jak ozvat.
             {contactPrefilled
               ? " Předvyplnili jsme údaje z tvého účtu — zkontroluj je a ulož."

@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { formatPrice } from "@/lib/format";
 import { PHOTOS_BUCKET } from "@/lib/photos";
+import { isMissingSchemaError } from "@/lib/db-errors";
+import { SchemaErrorScreen } from "../schema-error";
 import { ErrorBox, SuccessBox, smallBtn } from "./ui";
 import { ConfirmSubmit } from "./confirm-submit";
 import { deletePresentation } from "./actions";
@@ -83,6 +85,17 @@ export default async function PresentationsPage({
   // rozbité RLS/migraci/chybějící profil. Zaloguj na server a ukaž bezpečnou hlášku.
   if (loadError) {
     console.error("[presentations] načtení selhalo:", loadError.message);
+    // Chybějící sloupec/tabulka = nedorovnaná databáze. Řekni to konkrétně,
+    // ať to nevypadá jako výpadek, který se sám spraví „za chvíli".
+    if (isMissingSchemaError(loadError)) {
+      return (
+        <SchemaErrorScreen
+          detail={loadError.message}
+          backHref="/account"
+          backLabel="← zpět na účet"
+        />
+      );
+    }
     return (
       <main style={{ ...wrap, justifyContent: "center", textAlign: "center", gap: "1rem" }}>
         <h1 style={{ fontSize: "1.6rem", fontWeight: 700 }}>Moje prezentace</h1>
@@ -262,12 +275,17 @@ export default async function PresentationsPage({
                       <Link href={`/presentations/${p.id}/texts`} style={quickLink}>
                         Texty
                       </Link>
+                      {p.status === "published" ? null : (
+                        <Link href={`/presentations/${p.id}/publish`} style={quickLink}>
+                          Zveřejnit
+                        </Link>
+                      )}
                       <Link
                         href={`/listing/${p.slug}`}
                         target="_blank"
                         style={{ ...quickLink, color: "var(--accent)", borderColor: "var(--accent)" }}
                       >
-                        Náhled ↗
+                        {p.status === "published" ? "Veřejná stránka ↗" : "Náhled ↗"}
                       </Link>
                       <form action={deletePresentation} style={{ marginLeft: "auto" }}>
                         <input type="hidden" name="id" value={p.id} />

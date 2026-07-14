@@ -2,6 +2,69 @@
 
 (Primární evidence bude v ClickUpu po připojení konektoru; tohle je pracovní plán aktuální fáze.)
 
+## Session 2026-07-14 (3) — první reálný běh ESLintu: 6 nálezů
+
+**Stav: HOTOVÉ-NEOVĚŘENÉ.** Sandbox znovu nenastartoval („No space left on device"),
+takže `npm run lint`, `npm test`, `npm run typecheck` ani `npm run build` NEBĚŽELY.
+Nic z toho si neodškrtávám — ověření spustí Karel u sebe (příkazy dole).
+
+**Proč:** lint v projektu nikdy neběžel (viz lessons 2026-07-14 (3)), teď poprvé
+reálně proběhl a našel 6 problémů — 4 errory a 2 warningy.
+
+**Opraveno (6/6 nahlášených):**
+- [x] `react/no-unescaped-entities` (4 errory, 3 soubory): ASCII `"` v holém JSX textu
+      nahrazeno entitami `&bdquo;` / `&ldquo;` — `listing/[slug]/not-found.tsx:32`,
+      `presentations/[id]/photos/page.tsx:133`, `presentations/[id]/texts/form.tsx:106` (2×).
+      Uvozovky ze zobrazeného textu NEZMIZELY. Jediná změna vzhledu: zavírací uvozovka
+      byla rovná (`"`), teď je správná česká (`"`) — viz „Změna vzhledu" níž.
+- [x] `no-unused-vars` (2 warningy): smazán mrtvý import `type FormState`
+      (`account/profile-form.tsx:7`, `presentations/[id]/texts/form.tsx:8`).
+      Diagnóza: typ se odvodí ze signatury akce (`updateProfile`/`updateTexts` vrací
+      `Promise<FormState>`), import byl zbytečný. Žádný `eslint-disable`.
+
+**Změna vzhledu (1 znak, ke schválení):** v těch třech textech byla zavírací uvozovka
+rovná `"` (typograficky špatná čeština). Entita `&ldquo;` vykreslí správnou českou `"`.
+Kdyby to Karel chtěl přesně jako dřív (rovná uvozovka), stačí `&ldquo;` → `&quot;`.
+
+**Prohledán zbytek repa (staticky, subagent — eslint nešel spustit):** `app/src` v projektu
+NEEXISTUJE (kód je v `app/app` a `app/lib`). Prošlo 33 souborů, další pravděpodobné nálezy
+= žádné. 4× `<img>` už má platný `eslint-disable`, `_prevState` se nehlásí
+(default `args: "after-used"`), žádné `any`, žádný `var`, jediný `useEffect` má úplné deps.
+K sledování: `eslint-plugin-react-hooks@7` přináší nová React Compiler pravidla — na
+`publish/hotovo/waiting.tsx` nikdy neběžela.
+
+**Riziko:** velmi nízké. Změna se dotýká jen zobrazeného textu a jednoho importu, žádná logika.
+**Rollback:** `git revert <hash>` (commit dělá Karel, viz níž).
+
+## Session 2026-07-14 — E3.9 Stripe platba (odemknutí publikace)
+
+**Proč:** DB brzda `enforce_paid_before_publish()` drží, ale neexistuje cesta, jak zaplatit
+→ nikdo nemůže publikovat → produkt nevydělává. Jediná blokující díra před spuštěním.
+
+**Návrh (spec):**
+- [x] Cena a měna v konfiguraci: `PUBLISH_PRICE_CZK` (default 490 Kč), `PUBLISH_PRODUCT_NAME`; měna CZK napevno (dvoudecimální, min. 15 Kč — limit Stripu)
+- [x] Migrace `20260714120000_stripe_payments.sql`:
+      sloupce `stripe_session_id`, `stripe_event_id`, `refund_event_id`, `refunded_at`, `updated_at`;
+      stav `expired` navíc; **unikátní indexy** (session, event, refund event, max 1 pending a max 1 paid na prezentaci);
+      **idempotenční kniha `stripe_events`** (event_id = primární klíč);
+      trigger `unpublish_when_unpaid()` — když platba přestane být `paid`, prezentace spadne zpět na `draft`
+- [x] `lib/supabase/admin.ts` — service_role klient (jediný, kdo smí psát do `payments`)
+- [x] `lib/payments/*` — čistá logika (config, fulfill) oddělená od Stripu i Supabase (porty) → testovatelná bez sítě
+- [x] Server action „Zveřejnit" → Stripe Checkout (hosted, česky, CZK); dvojklik chrání unikátní index na jedné rozdělané platbě + znovupoužití otevřené session
+- [x] `/api/stripe/webhook` — ověřený podpis, idempotence přes `stripe_events`, na chybu 500 + uvolnění zámku (Stripe zopakuje)
+- [x] Návratová stránka `/presentations/[id]/publish/hotovo` — jen „platba se zpracovává"; publikaci NIKDY neodemyká podle URL
+- [x] Testy vitest vč. idempotence webhooku (`lib/__tests__/payments.test.ts`, 20 nových případů)
+- [x] Nezávislá bezpečnostní revize čerstvým agentem (čtením kódu)
+- ⚠️ **NEOVĚŘENO STROJOVĚ:** Linuxovému sandboxu v Cowork došlo místo na disku → v této session
+      NEŠLO spustit `npm install`, `npm test`, `tsc --noEmit`, `next build` ani `git commit`.
+      Kód je zapsaný na disk, ale **zelené testy a build musí spustit Karel** (příkazy v `tasks/kroky-pro-karla.md`).
+      Dokud neproběhnou, považuj E3.9 za HOTOVÉ-NEOVĚŘENÉ.
+- [ ] **Karel — spustit ověření:** `npm install && npm test && npm run typecheck && npm run build`
+- [ ] **Karel — commity:** v této session je NEŠLO udělat (viz výše); příkazy jsou v `tasks/kroky-pro-karla.md`
+- [ ] **Karel:** Stripe účet, klíče, webhook endpoint, proměnné ve Vercelu, testovací nákup
+- [ ] **Karel — rozhodnutí:** cena (default 490 Kč), refund → odpublikovat (implementováno), 4. krok průvodce „Zveřejnit"
+- NEpushnuto (push je vědomý krok Karla).
+
 ## Fáze 0 — založení systému
 - [x] Složka, git, struktura
 - [x] CLAUDE.md + RULES.md (ústava)

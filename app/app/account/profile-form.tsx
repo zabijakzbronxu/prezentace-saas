@@ -4,7 +4,7 @@
 // vyplněné hodnoty zůstávají.
 
 import { useActionState } from "react";
-import { MAX, type FormState } from "@/lib/presentations/form";
+import { MAX } from "@/lib/presentations/form";
 import { label, hint, input, primaryBtn, ErrorBox } from "../presentations/ui";
 import { updateProfile } from "./actions";
 

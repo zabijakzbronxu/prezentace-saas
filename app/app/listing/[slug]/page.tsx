@@ -4,6 +4,8 @@ import type { Metadata } from "next";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { PHOTOS_BUCKET } from "@/lib/photos";
 import { formatPrice, formatArea, formatAddress } from "@/lib/format";
+import { isMissingSchemaError } from "@/lib/db-errors";
+import { SchemaErrorScreen } from "../../schema-error";
 
 // Veřejná stránka prezentace pro zájemce — světlá prezentační šablona
 // (serifové nadpisy, vzdušná typografie; fonty řeší listing/layout.tsx).
@@ -45,7 +47,7 @@ async function loadListing(slug: string) {
   if (error) {
     console.error("[listing] načtení selhalo:", error.message);
   }
-  return { supabase, presentation: p ?? null };
+  return { supabase, presentation: p ?? null, loadError: error ?? null };
 }
 
 export async function generateMetadata({
@@ -153,7 +155,19 @@ export default async function ListingPage({
   }
 
   const { slug } = await params;
-  const { supabase, presentation: p } = await loadListing(slug);
+  const { supabase, presentation: p, loadError } = await loadListing(slug);
+
+  // Nedorovnaná databáze není „prezentace neexistuje". 404 by tady lhalo
+  // a poslalo Karla hledat chybu ve slugu místo v migracích.
+  if (loadError && isMissingSchemaError(loadError)) {
+    return (
+      <SchemaErrorScreen
+        detail={loadError.message}
+        backHref="/"
+        backLabel="← zpět na úvod"
+      />
+    );
+  }
   if (!p) notFound();
 
   const isPreview = p.status !== "published";
