@@ -68,6 +68,18 @@ export interface Database {
           contact_name: string | null;
           contact_email: string | null;
           contact_phone: string | null;
+          // Otínská — pole nemovitosti (migrace 20260715120000_otinska_sections.sql)
+          subtitle: string | null;
+          year_built: number | null;
+          floors: number | null;
+          built_area_m2: number | null;
+          building_dimensions: string | null;
+          condition: string | null;
+          ownership: string | null;
+          monthly_costs_czk: number | null;
+          lat: number | null;
+          lng: number | null;
+          target_persona: Json | null;
           published_at: string | null;
           created_at: string;
           updated_at: string;
@@ -93,6 +105,17 @@ export interface Database {
           contact_name?: string | null;
           contact_email?: string | null;
           contact_phone?: string | null;
+          subtitle?: string | null;
+          year_built?: number | null;
+          floors?: number | null;
+          built_area_m2?: number | null;
+          building_dimensions?: string | null;
+          condition?: string | null;
+          ownership?: string | null;
+          monthly_costs_czk?: number | null;
+          lat?: number | null;
+          lng?: number | null;
+          target_persona?: Json | null;
           published_at?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -115,6 +138,10 @@ export interface Database {
           is_hero: boolean;
           sort_order: number;
           alt_text: string | null;
+          // Otínská (migrace 20260715120000_otinska_sections.sql)
+          caption: string | null;
+          category: string | null;
+          room_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -124,6 +151,9 @@ export interface Database {
           is_hero?: boolean;
           sort_order?: number;
           alt_text?: string | null;
+          caption?: string | null;
+          category?: string | null;
+          room_id?: string | null;
           created_at?: string;
         };
         Update: Partial<
@@ -200,6 +230,262 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["stripe_events"]["Insert"]>;
         Relationships: [];
       };
+      // ===== Otínská — stavebnice sekcí (20260715120000) =====
+      presentation_sections: {
+        Row: {
+          id: string;
+          presentation_id: string;
+          kind: string; // viz SectionKind v lib/presentations/sections.ts
+          position: number;
+          enabled: boolean;
+          content: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          presentation_id: string;
+          kind: string;
+          position?: number;
+          enabled?: boolean;
+          content?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["presentation_sections"]["Insert"]
+        >;
+        Relationships: [
+          {
+            foreignKeyName: "presentation_sections_presentation_id_fkey";
+            columns: ["presentation_id"];
+            referencedRelation: "presentations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      presentation_documents: {
+        Row: {
+          id: string;
+          presentation_id: string;
+          name: string;
+          category: string | null;
+          description: string | null;
+          storage_path: string;
+          file_type: string | null;
+          file_size_bytes: number | null;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          presentation_id: string;
+          name: string;
+          category?: string | null;
+          description?: string | null;
+          storage_path: string;
+          file_type?: string | null;
+          file_size_bytes?: number | null;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["presentation_documents"]["Insert"]
+        >;
+        Relationships: [
+          {
+            foreignKeyName: "presentation_documents_presentation_id_fkey";
+            columns: ["presentation_id"];
+            referencedRelation: "presentations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      // ===== Codex 2026-07-15 — registrace obrázků médií (H3/H4) =====
+      presentation_media: {
+        Row: {
+          id: string;
+          presentation_id: string;
+          section_id: string;
+          storage_path: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          presentation_id: string;
+          section_id: string;
+          storage_path: string;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["presentation_media"]["Insert"]
+        >;
+        Relationships: [
+          {
+            foreignKeyName: "presentation_media_presentation_id_fkey";
+            columns: ["presentation_id"];
+            referencedRelation: "presentations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "presentation_media_section_id_fkey";
+            columns: ["section_id"];
+            referencedRelation: "presentation_sections";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      // ===== Otínská — model připravený pro další kola (zatím bez renderu) =====
+      presentation_floors: {
+        Row: {
+          id: string;
+          presentation_id: string;
+          label: string;
+          floorplan_path: string | null;
+          plan_data: Json | null;
+          scale: Json | null;
+          image_view: Json | null;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          presentation_id: string;
+          label: string;
+          floorplan_path?: string | null;
+          plan_data?: Json | null;
+          scale?: Json | null;
+          image_view?: Json | null;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["presentation_floors"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      presentation_rooms: {
+        Row: {
+          id: string;
+          floor_id: string;
+          name: string;
+          area_m2: number | null;
+          color: string | null;
+          polygon: Json;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          floor_id: string;
+          name: string;
+          area_m2?: number | null;
+          color?: string | null;
+          polygon?: Json;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["presentation_rooms"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      presentation_maps: {
+        Row: {
+          id: string;
+          presentation_id: string;
+          title: string | null;
+          caption: string | null;
+          storage_path: string | null;
+          map_group: string | null;
+          marker: Json | null;
+          zoom: number | null;
+          offset_xy: Json | null;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          presentation_id: string;
+          title?: string | null;
+          caption?: string | null;
+          storage_path?: string | null;
+          map_group?: string | null;
+          marker?: Json | null;
+          zoom?: number | null;
+          offset_xy?: Json | null;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["presentation_maps"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      presentation_places: {
+        Row: {
+          id: string;
+          presentation_id: string;
+          name: string;
+          place_type: string | null;
+          place_id: string | null;
+          gps: Json | null;
+          rating: number | null;
+          review_count: number | null;
+          image: string | null;
+          distance: string | null;
+          description: string | null;
+          super_category: string | null;
+          reviews: Json;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          presentation_id: string;
+          name: string;
+          place_type?: string | null;
+          place_id?: string | null;
+          gps?: Json | null;
+          rating?: number | null;
+          review_count?: number | null;
+          image?: string | null;
+          distance?: string | null;
+          description?: string | null;
+          super_category?: string | null;
+          reviews?: Json;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["presentation_places"]["Insert"]
+        >;
+        Relationships: [];
+      };
+      presentation_panoramas: {
+        Row: {
+          id: string;
+          presentation_id: string;
+          storage_path: string | null;
+          config: Json | null;
+          hotspots: Json;
+          sort_order: number;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          presentation_id: string;
+          storage_path?: string | null;
+          config?: Json | null;
+          hotspots?: Json;
+          sort_order?: number;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["presentation_panoramas"]["Insert"]
+        >;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -219,6 +505,57 @@ export interface Database {
         Args: { p_photo_id: string };
         Returns: string | null;
       };
+      // ===== Otínská — sekce =====
+      add_presentation_section: {
+        Args: { p_presentation_id: string; p_kind: string };
+        Returns: string;
+      };
+      move_presentation_section: {
+        Args: { p_section_id: string; p_direction: string };
+        Returns: null;
+      };
+      set_presentation_section_enabled: {
+        Args: { p_section_id: string; p_enabled: boolean };
+        Returns: null;
+      };
+      delete_presentation_section: {
+        Args: { p_section_id: string };
+        Returns: null;
+      };
+      reorder_presentation_sections: {
+        Args: { p_presentation_id: string; p_ordered_ids: string[] };
+        Returns: null;
+      };
+      // ===== Otínská — dokumenty =====
+      register_presentation_document: {
+        Args: {
+          p_presentation_id: string;
+          p_storage_path: string;
+          p_name: string;
+          p_category: string | null;
+          p_description: string | null;
+          p_file_type: string | null;
+          p_file_size: number | null;
+        };
+        Returns: string;
+      };
+      delete_presentation_document: {
+        Args: { p_document_id: string };
+        Returns: string | null;
+      };
+      swap_document_order: {
+        Args: { p_doc_a: string; p_doc_b: string };
+        Returns: null;
+      };
+      // ===== Codex 2026-07-15 — registrace obrázků médií (H3/H4) =====
+      sync_presentation_media: {
+        Args: {
+          p_presentation_id: string;
+          p_section_id: string;
+          p_paths: string[];
+        };
+        Returns: null;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
@@ -232,3 +569,9 @@ export type PresentationPhoto =
   Database["public"]["Tables"]["presentation_photos"]["Row"];
 export type Payment = Database["public"]["Tables"]["payments"]["Row"];
 export type StripeEvent = Database["public"]["Tables"]["stripe_events"]["Row"];
+export type PresentationSection =
+  Database["public"]["Tables"]["presentation_sections"]["Row"];
+export type PresentationDocument =
+  Database["public"]["Tables"]["presentation_documents"]["Row"];
+export type PresentationMedia =
+  Database["public"]["Tables"]["presentation_media"]["Row"];

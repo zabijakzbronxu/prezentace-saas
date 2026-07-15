@@ -2,6 +2,229 @@
 
 (Primární evidence bude v ClickUpu po připojení konektoru; tohle je pracovní plán aktuální fáze.)
 
+## Session 2026-07-15 (6) — tlačítko „Naplnit ukázkovým obsahem Otínská"
+
+**Proč:** Karlova výtka „je to holá kostra". Po nasazení má u prázdné prezentace vidět hned
+plný reálný obsah, ne prázdný editor. Řešení: jedno tlačítko, které prázdnou prezentaci naplní
+reálným obsahem z Otínské (texty + čísla).
+
+**Rozsah (úzký, bez migrace):** čistý datový modul + jedna server action + tlačítko v kroku Sekce.
+Nesahám na bezpečnostní věci z dnešní Codex opravy (jen je respektuji). Sandbox mimo (no space) →
+NESPOUŠTÍM nic; testy jako soubory; ověření + commit předám Karlovi. NEODŠKRTÁVÁM, co jsem neviděl.
+
+**Rozhodnutí architektury (nízké riziko):**
+- Obsah Otínské = čistý modul `app/lib/presentations/otinska-sample.ts` (pole prezentace + seedy sekcí).
+  Testovatelný bez DB. Žádná nová tabulka, žádná migrace, žádná změna `APLIKUJ_VSE.sql`.
+- Action `seedOtinska` v `sections/actions.ts`: přihlášený uživatel, přes RLS jen VLASTNÍ prezentace,
+  navíc explicitní kontrola `owner_id == user.id` (aby published cizí prezentace neskončila tichým no-opem).
+- **Idempotence:** plní JEN prezentaci bez jediné sekce; jinak odmítne (kód `seed-not-empty`).
+- Sekce se vkládají přímým `insert` (DB trigger whitelistu + unikátní index na singletony to jistí).
+- Hero a Parametry čtou ze SLOUPCŮ prezentace → action je zapisuje (title, subtitle, popis, lokalita,
+  parametry, kontakt, GPS). Cena Otínské = „na vyžádání" → `price_czk = null`, hero `show_price:false`.
+- **Obrázkové sekce NEplní** (nejsou ve Storage → rozbité náhledy): galerie, hero foto, půdorysy,
+  analytické mapy, panorama, dokumenty, mapa. Video Otínské je MP4 (ne YouTube/Vimeo) → sekci video vynechávám.
+- Přepis polí prezentace je vědomý (potvrzovací dotaz u tlačítka) a tlačítko je jen u PRÁZDNÉ prezentace.
+
+**Co se naplní (13 sekcí):** hero · text Příběh (description) · text Lokalita (location_text) ·
+přednosti (benefits) · parametry+PENB · technický stav (7 položek) · body zájmu (POI) ·
+cenové odhady (4) · reference (social) · novinky · investiční kalkulačka · kontakt.
+
+Plán (budoucí čas — odškrtne Karel po ověření na obrazovce):
+- [ ] `app/lib/presentations/otinska-sample.ts` — reálná data + `isSeedAllowed()` + `ownsPresentation()`
+- [ ] `seedOtinska()` v `sections/actions.ts` (+ kódy `seed-not-empty` / `seed-failed`, `?seeded=1`)
+- [ ] Tlačítko v `sections/page.tsx` — jen u prázdné prezentace, s potvrzením; hláška o výsledku
+- [ ] Testy `app/lib/__tests__/otinska-sample.test.ts` (správné typy, idempotence, vlastník, validní obsah)
+- [ ] Křížová revize čerstvým podagentem, oprava blokátorů (nepoužité importy, české uvozovky v `"…"`)
+- [ ] Kroky pro Karla: `npm test && npm run typecheck && npm run lint && npm run build` + commit
+
+### Review — Session 2026-07-15 (6)
+
+**Stav: HOTOVÉ-NEOVĚŘENÉ.** Sandbox mimo (no space) → `npm test`, `typecheck`, `lint`
+ani `build` NEBĚŽELY. Nic si neodškrtávám jako zelené — spustí Karel (příkazy v shrnutí chatu).
+
+Co přibylo:
+- `app/lib/presentations/otinska-sample.ts` — reálná data Otínské (pole prezentace + 12 sekcí)
+  + čisté brány `isSeedAllowed` (jen prázdná prezentace) a `ownsPresentation` (jen vlastník).
+- `seedOtinska` v `sections/actions.ts` — přihlášený vlastník, jen prázdná prezentace, přímý
+  insert sekcí (jistí DB trigger whitelistu + unikátní index singletonů), žádné tiché selhání.
+- Tlačítko v `sections/page.tsx` (jen v prázdném stavu, s potvrzením) + hlášky + `?seeded=1`.
+- Testy `otinska-sample.test.ts` (typy sekcí, idempotence, vlastník, obsah přes readery, limity polí).
+
+Bez migrace, bez změny `APLIKUJ_VSE.sql`, bez doteku bezpečnostních věcí z dnešní Codex opravy.
+
+Křížová revize čerstvým podagentem (čistý kontext): **žádný blokátor** — importy čisté, žádné
+české uvozovky v `"…"`, typy sedí (25 sloupců existuje; `content` stejný vzor jako `writeContent`),
+react/no-unescaped-entities čisté, bezpečnost i idempotence OK. Drobnost (neblokující): kontrola
+prázdnosti a insert nejsou v jedné transakci → při souběžném dvojkliku druhý pokus bezpečně padne
+na unikátním indexu singletonů (`seed-failed`), data se nerozbijí.
+
+Rozhodnutí k pozdější revizi Karlem:
+- Seed přepíše popisná pole TÉTO prezentace (titulek, podnadpis, popis, parametry, kontakt) obsahem
+  Otínské — vědomé, kryté potvrzovacím dotazem a jen u prázdné prezentace. Alternativa „plnit jen
+  prázdná pole" = změna pár řádků.
+- Kontakt je reálný z Otínské (Jakub Skala / telefon / e-mail). Když nechceš reálné číslo v ukázce,
+  řekni — dám neutrální.
+
+**Riziko:** nízké. Aditivní, existující sekce/akce nedotčené. **Rollback:** `git revert <hash>`
+(žádná migrace, z DB se nic nemaže).
+
+- [ ] **Karel — ověřit + commit** (příkazy v shrnutí chatu)
+
+## Session 2026-07-15 (5) — oprava Codex nálezů nad Otínskou (bezpečnost před spuštěním)
+
+**Rozsah:** 5× High + 3× Medium z nezávislé revize (Codex) nad dnešní prací. Každý nález
+nejdřív OVĚŘEN v kódu (viz `REVIEW_CODEX_2026_07_15.md`), pak opraven. Hráze musí držet
+i proti přímému volání Supabase REST/Storage API. Sandbox mimo (no space) → NESPOUŠTÍM
+nic; testy jako soubory; ověření + commit předám Karlovi. NEODŠKRTÁVÁM ověření, které jsem neviděl.
+
+Plán (budoucí čas — odškrtává se AŽ po ověření na obrazovce):
+- [ ] H1 — RLS sekcí: veřejně jen `enabled=true` + published (owner vidí vše)
+- [ ] H2 — dokumenty (DB řádek + Storage) veřejné jen když je sekce `documents` zapnutá
+- [ ] H3 — `presentation-media` veřejně jen přes registrovaný řádek zapnuté sekce published prezentace
+- [ ] H4 — tabulka `presentation_media` + RPC `sync_presentation_media` s limitem v DB + backfill
+- [ ] H5 — `safeExternalUrl()` v sections.ts, sanitizace při renderu (valuation, news) + validace při zápisu
+- [ ] M1 — unikátní index na singletony + trigger whitelistu typů (integrita v DB, ne jen RPC)
+- [ ] M2 — potvrzeny bucket limity (oba buckety); registrace média hlídá tvar cesty v DB
+- [ ] M3 — hlasitá hláška místo tichého fallbacku (sekce/fotky/dokumenty)
+- [ ] Migrace: nový soubor + idempotentně do `APLIKUJ_VSE.sql` (+ kontrolní SELECT)
+- [ ] Testy: URL sanitizace, whitelist/singleton, limity, RLS kontrakt
+- [ ] Křížová revize čerstvým podagentem, oprava blokátorů
+- [ ] Kroky pro Karla (migrace + test/typecheck/lint/build + commit)
+
+### Review — Session 2026-07-15 (5)
+
+**Stav: NAPSÁNO + křížově zrevidováno (žádný blokátor), ale STROJOVĚ NEOVĚŘENÉ.**
+Sandbox bez místa → migrace, `npm test`, `typecheck`, `lint`, `build` NEBĚŽELY.
+Checkboxy výše nechávám prázdné schválně — odškrtne je Karel po ověření na obrazovce.
+
+Co je hotové (v kódu):
+- **H1** RLS sekcí: anon jen `enabled=true`+published. **H2** dokumenty (DB řádek
+  i Storage) jen když je sekce `documents` zapnutá. **H3/H4** nová tabulka
+  `presentation_media` + RPC `sync_presentation_media` (limit v DB) + Storage policy
+  přes registraci; backfill existujících obrázků. **M1** unikátní index na singletony +
+  trigger whitelistu typů. **M2** limity obou bucketů znovu vynuceny; registrace média
+  hlídá tvar cesty v DB.
+- **H5** `safeExternalUrl()` v `sections.ts` — jen http/https; sanitizace při renderu
+  (valuation, news) i při zápisu. Prošel jsem všechna místa s user URL na veřejné stránce
+  (kontakt tel/mailto s pevnou předponou a video přes `parseVideoUrl` jsou bezpečné).
+- **M3** `QueryErrorScreen` — sekce/fotky/dokumenty rozlišují chybu dotazu od prázdna.
+- Migrace `20260715180000_codex_security_hardening.sql` + idempotentně do `APLIKUJ_VSE.sql`
+  (blok „6e“ před KONTROLOU, KONTROLA rozšířena). Testy `security-hardening.test.ts` +
+  SQL kontrakt v `checks/security-check.md`. Detaily a příkazy pro Karla v
+  `REVIEW_CODEX_2026_07_15.md`.
+
+Vedlejší efekt H1 (ke schválení): published prezentace s vypnutými VŠEMI sekcemi ukáže
+výchozí sadu (ne prázdno) — není únik, viz REVIEW. Rollback: `git revert` (jeden commit),
+`presentation_media` lze dropnout, nic se z dat nemaže.
+
+- [ ] **Karel — ověřit + commit** (příkazy v `REVIEW_CODEX_2026_07_15.md`)
+
+## Session 2026-07-15 (4) — dvě nové sekce: Video + Investiční kalkulačka
+
+**Rozsah:** úzký. Přidat DVA nové typy sekcí přesně podle stávajícího vzoru (JSONB obsah,
+žádná nová tabulka). NEsahat na existující sekce mimo nutné zapojení. Sandbox mimo →
+NESPOUŠTÍM nic; ověření předám Karlovi. NEODŠKRTÁVÁM ověření, které jsem neviděl.
+
+Rozhodnutí (v mezích spec, nízké riziko):
+- Obsah obou sekcí = JSONB na řádku sekce (jako ostatní bezsouborové sekce). Žádná tabulka.
+- Video: parser staví embed URL z ověřeného ID → src je VŽDY jen na povolené doméně
+  (youtube-nocookie.com / player.vimeo.com). Nikdy neprochází syrový vstup, nikdy `<script>`.
+  Neplatný/nepodporovaný odkaz: v náhledu srozumitelná hláška „umíme YouTube a Vimeo",
+  publikovaně vlídná hláška místo prázdna (žádné tiché selhání), nikdy pád.
+- Kalkulačka: vlastní vstupy v JSONB (cena, plocha, volitelně nájem a roční náklady).
+  Výpočet čistě klientský (klientská komponenta volá čistou funkci `computeInvestment`).
+  Dělení nulou/prázdné vstupy → pomlčka, nepočítá se. Žádná externí služba.
+- Zapojení do `add_presentation_section` VYŽADUJE migraci (rozšíření whitelistu + singleton
+  listu), stejně jako kolo 2/3 → přidávám migraci a foldnu do APLIKUJ_VSE.sql.
+
+Plán (postaveno — NESPUŠTĚNO, ověří Karel):
+- [x] Registr `sections.ts`: video+investmentCalc ready:true; typy + readery; `parseVideoUrl`; `computeInvestment`
+- [x] Editor: `VideoFields` + `InvestmentCalcFields`; načtení defaults v page.tsx; `saveVideo`+`saveInvestmentCalc` v actions.ts
+- [x] Veřejná stránka: `renderVideo` (iframe embed) + `renderInvestmentCalc`; klientská `InvestmentCalcView`
+- [x] Migrace `20260715160000_video_investmentcalc.sql` + fold do `APLIKUJ_VSE.sql` (idempotentně, obě kopie funkce shodné)
+- [x] Testy `sections.test.ts` rozšířeny (parser video URL vč. hraničních tvarů; výpočty vč. dělení nulou/prázdna/NaN) — NESPUŠTĚNO
+- [x] Křížová revize čerstvým podagentem → ŽÁDNÝ blokátor (importy čisté, žádné české uvozovky v `"…"`, video embed jen povolené domény, výpočet ošetřuje dělení nulou, obě SQL kopie shodné). Opravena 1 drobnost (zastaralý komentář).
+- [ ] **Karel — ověřit + commit** (viz Review níž)
+
+### Review — Session 2026-07-15 (4)
+
+**Stav: HOTOVÉ-NEOVĚŘENÉ.** Sandbox mimo → NESPUSTIL jsem migraci, `npm test`,
+`typecheck`, `lint` ani `build`. Nic si neodškrtávám jako „zelené" — spustí Karel.
+
+Co přibylo: dvě samostatné sekce podle stávajícího vzoru (JSONB obsah, žádná nová
+tabulka). **Video** — majitel vloží odkaz YouTube/Vimeo, veřejná stránka vykreslí
+privacy-friendly `<iframe>` (youtube-nocookie / player.vimeo); embed URL se skládá
+z ověřeného ID, takže src vždy míří jen na povolenou doménu; neplatný odkaz ukáže
+hlášku (ne prázdno, ne pád). **Investiční kalkulačka** — majitel zadá cenu, plochu,
+volitelně nájem a roční náklady; výpočet (cena/m², hrubý a čistý výnos) běží čistě
+v prohlížeči; dělení nulou a prázdné vstupy → pomlčka.
+
+Migrace: **ANO** (jako u kola 2/3) — rozšířen whitelist + singleton list ve funkci
+`add_presentation_section`. Bez ní by šly typy vidět v katalogu, ale nešlo je přidat.
+
+Rozhodnutí k pozdější revizi Karlem (nízké riziko):
+- Neplatný odkaz na video se na PUBLIKOVANÉ stránce zobrazí jako vlídná hláška
+  „Video se nepodařilo načíst." (dle spec „ne prázdno, žádné tiché selhání").
+  Kdyby Karel chtěl u návštěvníka sekci raději úplně skrýt, je to změna jednoho
+  řádku v `renderVideo` (`return null` místo hlášky pro `!isPreview`).
+- Kalkulačka má vlastní vstupy (nebere cenu/plochu z „Parametrů") — dle spec.
+
+**Riziko:** nízké. Aditivní změna, existující sekce nedotčené (jen registr + 2 switch
+větve navíc). **Rollback:** `git revert <hash>` + funkce `add_presentation_section`
+se `create or replace` vrátí spuštěním staršího APLIKUJ_VSE (nebo prostě neškodí —
+whitelist je jen širší). **Ověřovací cesta:** viz „Kroky pro Karla" v shrnutí chatu.
+
+## Session 2026-07-15 (3) — Otínská KOLO 2 + 3 POSTAVENO (HOTOVÉ-NEOVĚŘENÉ)
+
+**Stav: kolo 2 (půdorysy) + kolo 3 (analytické mapy, POI, reference, novinky, panorama)
+napsáno. Sandbox mimo → NESPUŠTĚNO (migrace/test/build). NEODŠKRTÁVÁM ověření.**
+
+Rozhodnutí architektury: obsah nových sekcí je v JSONB (jako kolo 1); obrázky (plány
+pater, fotky místností, analytické mapy, panorama) jdou do JEDNOHO privátního bucketu
+`presentation-media` s GENERICKÝM veřejným čtením přes cestu (published + owner). Žádné
+nové tabulky — jen bucket + rozšíření whitelistu ve `add_presentation_section`.
+
+- [x] Registr: 6 kindů odemčeno (ready+singleton) + readery obsahu; `lib/media.ts`
+- [x] Migrace `20260715140000_otinska_round23.sql` (media bucket + policies + rozšíření funkce) → fold do APLIKUJ_VSE (6c + kontrola)
+- [x] Editory bez souborů: POI, reference (hvězdičky), novinky (RepeatableItems, JSONB)
+- [x] Editory s obrázky: sdílený MediaUploader; analytické mapy (taby + „proč"), panorama (obrázek + poznámka), půdorysy (patra + plán + místnosti s fotkou/popisem)
+- [x] Veřejné renderery: mapy v tabech, půdorysy v tabech + modal místnosti, POI karty, reference, novinky, panorama (statické + „interaktivní připravujeme")
+- [x] Testy: rozšířen `sections.test.ts` (ready set, nové readery), nový `media.test.ts`
+- [x] `tasks/kroky-pro-karla.md`: co vyžaduje klíč/službu (Google Places = budoucnost, panorama interaktivita = budoucnost, media bucket)
+
+Křížová revize (2 nezávislí agenti):
+- SQL/registr: bez blokátorů (whitelist 16 a singleton 12 sedí SQL↔katalog; media policy nevytéká drafty). Robustnost: media public-read porovnává cestu jako text (ne cast na uuid) — **upraveno**.
+- Editor/stránka: 1 blokátor — duplicitní klíč `floors` v typu `SectionDefaults` (parametry string vs. půdorysy pole) → TS2300 → **opraveno** (přejmenováno na `floorsData`). Náhled v MediaUploaderu po přeřazení — **opraveno**.
+- Známé omezení (neblokující): při výměně/odebrání obrázku zůstává starý soubor v bucketu (sirotek v privátním úložišti). Úklid na příště.
+
+- [ ] **Karel — ověřit:** APLIKUJ_VSE.sql → `npm test && npm run build` → klik → commit.
+
+## Session 2026-07-15 (2) — Otínská 1A→1B→1C POSTAVENO (HOTOVÉ-NEOVĚŘENÉ)
+
+**Stav: kód 1A+1B+1C napsán dle `tasks/otinska-1-1-plan.md`. Sandbox byl mimo provoz →
+NESPUSTIL jsem migraci, `npm test`, `tsc`, `eslint` ani `build`. NEODŠKRTÁVÁM ověření — spustí Karel.**
+
+1A datový model:
+- [x] Migrace `app/supabase/migrations/20260715120000_otinska_sections.sql` + 1:1 vloženo do `APLIKUJ_VSE.sql` (sekce „6b" + rozšířená kontrola)
+- [x] Páteř `presentation_sections` (typ/pořadí/zapnuto/JSON) + RLS + RPC řazení/zapínání pod zámkem
+- [x] `presentations` +11 polí nemovitosti (GPS, rok, podlaží, PENB už bylo…); `presentation_photos` +popisky/kategorie/room_id
+- [x] `presentation_documents` (tabulka) + bucket + policies; model floors/rooms/maps/places/panoramas pro další kola
+- [x] Backfill + runtime dopočet („nikdy prázdno"); limit fotek 20→60; `database.types.ts` rozšířeno
+
+1B editor:
+- [x] Krok „Sekce" (5 kroků průvodce): přidat/odebrat/šipky/zapnout-vypnout + editor obsahu pro 10 typů + uploader dokumentů + katalog „připravujeme"
+
+1C veřejná stránka:
+- [x] `/listing/[slug]` renderuje ZAPNUTÉ sekce v pořadí; hero overlay, sticky cena, lightbox, PENB stupnice, mapa, benefity/dokumenty/odhady/tech.stav/kontakt; neumělé sekce publikovaně přeskočeny; OG obrázek
+
+Testy: [x] `lib/__tests__/sections.test.ts` + `documents.test.ts` (NESPUŠTĚNO)
+
+Křížová revize (2 nezávislí agenti, čerstvý kontext):
+- 1A: bez blokátorů (shoda SQL↔typy↔registr, RLS neoslabeno, veřejné čtení jen published).
+- 1B/1C: 1 blokátor (nepoužitý import `formatPrice`) → **opraveno**; jinak importy/logika/uvozovky OK.
+
+- [ ] **Karel — ověřit:** migrace (APLIKUJ_VSE.sql) → `npm test && npm run build` → klik v prohlížeči → commity 1A/1B/1C (příkazy v chatu)
+
 ## Session 2026-07-14 (3) — první reálný běh ESLintu: 6 nálezů
 
 **Stav: HOTOVÉ-NEOVĚŘENÉ.** Sandbox znovu nenastartoval („No space left on device"),

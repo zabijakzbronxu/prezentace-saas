@@ -32,6 +32,9 @@
 --    20260707121000  status_slug_guard        — tvrdší platební pojistka + tvar slugu
 --    20260713220000  review_2026_07_hardening — trigger na tvar cesty k fotce
 --    20260714120000  stripe_payments          — Stripe sloupce, idempotence webhooku
+--    20260715120000  otinska_sections         — stavebnice sekcí + pole nemovitosti + dokumenty
+--    20260715140000  otinska_round23          — kolo 2/3: media bucket + odemčení 6 typů sekcí
+--    20260715160000  video_investmentcalc     — kolo 4: odemčení sekcí Video + Investiční kalkulačka (JSONB, bez tabulky)
 --    + storage-setup.md                       — bucket `presentation-photos` + policies
 -- =====================================================================
 
@@ -859,6 +862,1100 @@ on conflict (id) do nothing;
 
 
 -- =====================================================================
+-- 6b) OTÍNSKÁ — STAVEBNICE SEKCÍ  (migrace 20260715120000_otinska_sections)
+--     Přestavba prezentace na sekce: páteř + pole nemovitosti + dokumenty +
+--     model půdorysů/map/panoramat + RLS + RPC řazení/zapínání + backfill +
+--     limit fotek 60 + bucket dokumentů. Vše ADITIVNÍ, idempotentní.
+-- =====================================================================
+
+-- 6b-1) PÁTEŘ — presentation_sections
+create table if not exists public.presentation_sections (
+  id              uuid primary key default gen_random_uuid(),
+  presentation_id uuid not null references public.presentations (id) on delete cascade,
+  kind            text not null,
+  position        integer not null default 0,
+  enabled         boolean not null default true,
+  content         jsonb not null default '{}'::jsonb,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  constraint presentation_sections_kind_ck check (kind in (
+    'hero','text','parameters','gallery','map','benefits','documents','valuation',
+    'technicalCondition','contact','video','floorplans','analyticMaps','poi',
+    'panorama','socialProof','news','investmentCalc','chatbot'
+  ))
+);
+comment on table public.presentation_sections is
+  'Sekce prezentace (stavebnice). Jeden řádek = jedna sekce: typ, pořadí, zapnuto, JSON obsah.';
+create index if not exists presentation_sections_presentation_idx
+  on public.presentation_sections (presentation_id);
+create index if not exists presentation_sections_order_idx
+  on public.presentation_sections (presentation_id, position);
+drop trigger if exists presentation_sections_set_updated_at on public.presentation_sections;
+create trigger presentation_sections_set_updated_at
+  before update on public.presentation_sections
+  for each row execute function public.set_updated_at();
+
+-- 6b-2) PRESENTATIONS — chybějící pole nemovitosti
+alter table public.presentations
+  add column if not exists subtitle            text,
+  add column if not exists year_built          integer,
+  add column if not exists floors              smallint,
+  add column if not exists built_area_m2       numeric(10,2),
+  add column if not exists building_dimensions text,
+  add column if not exists condition           text,
+  add column if not exists ownership           text,
+  add column if not exists monthly_costs_czk   integer,
+  add column if not exists lat                 numeric(9,6),
+  add column if not exists lng                 numeric(9,6),
+  add column if not exists target_persona      jsonb;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint
+    where conname = 'presentations_year_built_valid'
+      and conrelid = 'public.presentations'::regclass) then
+    alter table public.presentations add constraint presentations_year_built_valid
+      check (year_built is null or (year_built between 1500 and 2100)) not valid;
+  end if;
+  if not exists (select 1 from pg_constraint
+    where conname = 'presentations_floors_valid'
+      and conrelid = 'public.presentations'::regclass) then
+    alter table public.presentations add constraint presentations_floors_valid
+      check (floors is null or (floors between 0 and 300)) not valid;
+  end if;
+  if not exists (select 1 from pg_constraint
+    where conname = 'presentations_built_area_nonneg'
+      and conrelid = 'public.presentations'::regclass) then
+    alter table public.presentations add constraint presentations_built_area_nonneg
+      check (built_area_m2 is null or (built_area_m2 >= 0 and built_area_m2 <= 1000000)) not valid;
+  end if;
+  if not exists (select 1 from pg_constraint
+    where conname = 'presentations_monthly_costs_nonneg'
+      and conrelid = 'public.presentations'::regclass) then
+    alter table public.presentations add constraint presentations_monthly_costs_nonneg
+      check (monthly_costs_czk is null or (monthly_costs_czk >= 0 and monthly_costs_czk <= 1000000000)) not valid;
+  end if;
+  if not exists (select 1 from pg_constraint
+    where conname = 'presentations_lat_valid'
+      and conrelid = 'public.presentations'::regclass) then
+    alter table public.presentations add constraint presentations_lat_valid
+      check (lat is null or (lat between -90 and 90)) not valid;
+  end if;
+  if not exists (select 1 from pg_constraint
+    where conname = 'presentations_lng_valid'
+      and conrelid = 'public.presentations'::regclass) then
+    alter table public.presentations add constraint presentations_lng_valid
+      check (lng is null or (lng between -180 and 180)) not valid;
+  end if;
+  if not exists (select 1 from pg_constraint
+    where conname = 'presentations_extra_text_lengths'
+      and conrelid = 'public.presentations'::regclass) then
+    alter table public.presentations add constraint presentations_extra_text_lengths
+      check (
+        (subtitle            is null or char_length(subtitle)            <= 300) and
+        (building_dimensions is null or char_length(building_dimensions) <= 60)  and
+        (condition           is null or char_length(condition)           <= 60)  and
+        (ownership           is null or char_length(ownership)           <= 60)
+      ) not valid;
+  end if;
+end $$;
+
+-- 6b-3) MODEL PŮDORYSŮ (render Kolo 2) — musí být PŘED presentation_photos.room_id
+create table if not exists public.presentation_floors (
+  id              uuid primary key default gen_random_uuid(),
+  presentation_id uuid not null references public.presentations (id) on delete cascade,
+  label           text not null,
+  floorplan_path  text,
+  plan_data       jsonb,
+  scale           jsonb,
+  image_view      jsonb,
+  sort_order      integer not null default 0,
+  created_at      timestamptz not null default now()
+);
+create index if not exists presentation_floors_presentation_idx
+  on public.presentation_floors (presentation_id);
+
+create table if not exists public.presentation_rooms (
+  id         uuid primary key default gen_random_uuid(),
+  floor_id   uuid not null references public.presentation_floors (id) on delete cascade,
+  name       text not null,
+  area_m2    numeric(6,2),
+  color      text,
+  polygon    jsonb not null default '{}'::jsonb,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now()
+);
+create index if not exists presentation_rooms_floor_idx
+  on public.presentation_rooms (floor_id);
+
+-- 6b-4) PRESENTATION_PHOTOS — popisky, kategorie, vazba na místnost
+alter table public.presentation_photos
+  add column if not exists caption  text,
+  add column if not exists category text,
+  add column if not exists room_id  uuid references public.presentation_rooms (id) on delete set null;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint
+    where conname = 'presentation_photos_caption_len'
+      and conrelid = 'public.presentation_photos'::regclass) then
+    alter table public.presentation_photos add constraint presentation_photos_caption_len
+      check (
+        (caption  is null or char_length(caption)  <= 300) and
+        (category is null or char_length(category) <= 40)
+      ) not valid;
+  end if;
+end $$;
+
+-- 6b-5) DOKUMENTY KE STAŽENÍ (vlastní tabulka — soubory = vlastní identita)
+create table if not exists public.presentation_documents (
+  id              uuid primary key default gen_random_uuid(),
+  presentation_id uuid not null references public.presentations (id) on delete cascade,
+  name            text not null,
+  category        text,
+  description     text,
+  storage_path    text not null,
+  file_type       text,
+  file_size_bytes bigint,
+  sort_order      integer not null default 0,
+  created_at      timestamptz not null default now()
+);
+comment on table public.presentation_documents is
+  'Soubory ke stažení k prezentaci. Soubor bydlí ve Storage (bucket presentation-documents), tady je jen cesta.';
+create index if not exists presentation_documents_presentation_idx
+  on public.presentation_documents (presentation_id);
+do $$
+begin
+  create unique index if not exists presentation_documents_storage_path_key
+    on public.presentation_documents (storage_path);
+exception when unique_violation then
+  raise notice 'INDEX presentation_documents_storage_path_key neprošel: dva záznamy míří na stejný soubor. Data jsem nechal být.';
+end $$;
+
+-- 6b-6) MODEL MAP / POI / PANORAMAT (render Kolo 3)
+create table if not exists public.presentation_maps (
+  id              uuid primary key default gen_random_uuid(),
+  presentation_id uuid not null references public.presentations (id) on delete cascade,
+  title           text,
+  caption         text,
+  storage_path    text,
+  map_group       text,
+  marker          jsonb,
+  zoom            numeric,
+  offset_xy       jsonb,
+  sort_order      integer not null default 0,
+  created_at      timestamptz not null default now()
+);
+create index if not exists presentation_maps_presentation_idx
+  on public.presentation_maps (presentation_id);
+
+create table if not exists public.presentation_places (
+  id              uuid primary key default gen_random_uuid(),
+  presentation_id uuid not null references public.presentations (id) on delete cascade,
+  name            text not null,
+  place_type      text,
+  place_id        text,
+  gps             jsonb,
+  rating          numeric,
+  review_count    integer,
+  image           text,
+  distance        text,
+  description     text,
+  super_category  text,
+  reviews         jsonb not null default '[]'::jsonb,
+  sort_order      integer not null default 0,
+  created_at      timestamptz not null default now()
+);
+create index if not exists presentation_places_presentation_idx
+  on public.presentation_places (presentation_id);
+
+create table if not exists public.presentation_panoramas (
+  id              uuid primary key default gen_random_uuid(),
+  presentation_id uuid not null references public.presentations (id) on delete cascade,
+  storage_path    text,
+  config          jsonb,
+  hotspots        jsonb not null default '[]'::jsonb,
+  sort_order      integer not null default 0,
+  created_at      timestamptz not null default now()
+);
+create index if not exists presentation_panoramas_presentation_idx
+  on public.presentation_panoramas (presentation_id);
+
+-- 6b-7) RLS na nových tabulkách (vzor: owner přes vazbu; veřejně jen published)
+alter table public.presentation_sections  enable row level security;
+alter table public.presentation_documents enable row level security;
+alter table public.presentation_floors    enable row level security;
+alter table public.presentation_rooms     enable row level security;
+alter table public.presentation_maps      enable row level security;
+alter table public.presentation_places    enable row level security;
+alter table public.presentation_panoramas enable row level security;
+
+drop policy if exists "sections owner all" on public.presentation_sections;
+create policy "sections owner all" on public.presentation_sections
+  for all
+  using (exists (select 1 from public.presentations p
+                 where p.id = presentation_id and p.owner_id = auth.uid()))
+  with check (exists (select 1 from public.presentations p
+                 where p.id = presentation_id and p.owner_id = auth.uid()));
+drop policy if exists "sections public read published" on public.presentation_sections;
+create policy "sections public read published" on public.presentation_sections
+  for select
+  using (exists (select 1 from public.presentations p
+                 where p.id = presentation_id and p.status = 'published'));
+
+drop policy if exists "documents owner all" on public.presentation_documents;
+create policy "documents owner all" on public.presentation_documents
+  for all
+  using (exists (select 1 from public.presentations p
+                 where p.id = presentation_id and p.owner_id = auth.uid()))
+  with check (exists (select 1 from public.presentations p
+                 where p.id = presentation_id and p.owner_id = auth.uid()));
+drop policy if exists "documents public read published" on public.presentation_documents;
+create policy "documents public read published" on public.presentation_documents
+  for select
+  using (exists (select 1 from public.presentations p
+                 where p.id = presentation_id and p.status = 'published'));
+
+drop policy if exists "floors owner all" on public.presentation_floors;
+create policy "floors owner all" on public.presentation_floors
+  for all
+  using (exists (select 1 from public.presentations p
+                 where p.id = presentation_id and p.owner_id = auth.uid()))
+  with check (exists (select 1 from public.presentations p
+                 where p.id = presentation_id and p.owner_id = auth.uid()));
+drop policy if exists "floors public read published" on public.presentation_floors;
+create policy "floors public read published" on public.presentation_floors
+  for select
+  using (exists (select 1 from public.presentations p
+                 where p.id = presentation_id and p.status = 'published'));
+
+drop policy if exists "rooms owner all" on public.presentation_rooms;
+create policy "rooms owner all" on public.presentation_rooms
+  for all
+  using (exists (select 1 from public.presentation_floors f
+                 join public.presentations p on p.id = f.presentation_id
+                 where f.id = floor_id and p.owner_id = auth.uid()))
+  with check (exists (select 1 from public.presentation_floors f
+                 join public.presentations p on p.id = f.presentation_id
+                 where f.id = floor_id and p.owner_id = auth.uid()));
+drop policy if exists "rooms public read published" on public.presentation_rooms;
+create policy "rooms public read published" on public.presentation_rooms
+  for select
+  using (exists (select 1 from public.presentation_floors f
+                 join public.presentations p on p.id = f.presentation_id
+                 where f.id = floor_id and p.status = 'published'));
+
+drop policy if exists "maps owner all" on public.presentation_maps;
+create policy "maps owner all" on public.presentation_maps
+  for all
+  using (exists (select 1 from public.presentations p
+                 where p.id = presentation_id and p.owner_id = auth.uid()))
+  with check (exists (select 1 from public.presentations p
+                 where p.id = presentation_id and p.owner_id = auth.uid()));
+drop policy if exists "maps public read published" on public.presentation_maps;
+create policy "maps public read published" on public.presentation_maps
+  for select
+  using (exists (select 1 from public.presentations p
+                 where p.id = presentation_id and p.status = 'published'));
+
+drop policy if exists "places owner all" on public.presentation_places;
+create policy "places owner all" on public.presentation_places
+  for all
+  using (exists (select 1 from public.presentations p
+                 where p.id = presentation_id and p.owner_id = auth.uid()))
+  with check (exists (select 1 from public.presentations p
+                 where p.id = presentation_id and p.owner_id = auth.uid()));
+drop policy if exists "places public read published" on public.presentation_places;
+create policy "places public read published" on public.presentation_places
+  for select
+  using (exists (select 1 from public.presentations p
+                 where p.id = presentation_id and p.status = 'published'));
+
+drop policy if exists "panoramas owner all" on public.presentation_panoramas;
+create policy "panoramas owner all" on public.presentation_panoramas
+  for all
+  using (exists (select 1 from public.presentations p
+                 where p.id = presentation_id and p.owner_id = auth.uid()))
+  with check (exists (select 1 from public.presentations p
+                 where p.id = presentation_id and p.owner_id = auth.uid()));
+drop policy if exists "panoramas public read published" on public.presentation_panoramas;
+create policy "panoramas public read published" on public.presentation_panoramas
+  for select
+  using (exists (select 1 from public.presentations p
+                 where p.id = presentation_id and p.status = 'published'));
+
+-- 6b-8) RPC — řazení a zapínání sekcí (SECURITY INVOKER, pod advisory zámkem)
+create or replace function public.add_presentation_section(
+  p_presentation_id uuid,
+  p_kind text
+)
+returns uuid
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_id uuid;
+  v_singleton boolean;
+begin
+  if p_kind not in (
+    'hero','text','parameters','gallery','map','benefits',
+    'documents','valuation','technicalCondition','contact',
+    'floorplans','analyticMaps','poi','panorama','socialProof','news',
+    'video','investmentCalc'
+  ) then
+    raise exception 'SECTION_KIND_NOT_ALLOWED' using errcode = 'check_violation';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('sections:' || p_presentation_id::text));
+
+  v_singleton := p_kind in (
+    'hero','parameters','contact','map','gallery','documents',
+    'floorplans','analyticMaps','poi','panorama','socialProof','news',
+    'video','investmentCalc'
+  );
+  if v_singleton and exists (
+    select 1 from public.presentation_sections
+    where presentation_id = p_presentation_id and kind = p_kind
+  ) then
+    raise exception 'SECTION_SINGLETON' using errcode = 'check_violation';
+  end if;
+
+  insert into public.presentation_sections (presentation_id, kind, position, enabled, content)
+  values (
+    p_presentation_id,
+    p_kind,
+    coalesce((select max(position) + 1 from public.presentation_sections
+              where presentation_id = p_presentation_id), 0),
+    true,
+    '{}'::jsonb
+  )
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+create or replace function public.move_presentation_section(
+  p_section_id uuid,
+  p_direction text
+)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_presentation uuid;
+  v_pos integer;
+  v_neighbor uuid;
+  v_neighbor_pos integer;
+begin
+  if p_direction not in ('up', 'down') then
+    raise exception 'SECTION_BAD_DIRECTION' using errcode = 'check_violation';
+  end if;
+
+  select presentation_id, position into v_presentation, v_pos
+    from public.presentation_sections where id = p_section_id;
+  if v_presentation is null then
+    raise exception 'SECTION_NOT_FOUND' using errcode = 'check_violation';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('sections:' || v_presentation::text));
+
+  select position into v_pos
+    from public.presentation_sections where id = p_section_id;
+
+  if p_direction = 'up' then
+    select id, position into v_neighbor, v_neighbor_pos
+      from public.presentation_sections
+     where presentation_id = v_presentation and position < v_pos
+     order by position desc limit 1;
+  else
+    select id, position into v_neighbor, v_neighbor_pos
+      from public.presentation_sections
+     where presentation_id = v_presentation and position > v_pos
+     order by position asc limit 1;
+  end if;
+
+  if v_neighbor is null then
+    return;
+  end if;
+
+  update public.presentation_sections set position = -1            where id = p_section_id;
+  update public.presentation_sections set position = v_pos         where id = v_neighbor;
+  update public.presentation_sections set position = v_neighbor_pos where id = p_section_id;
+end;
+$$;
+
+create or replace function public.set_presentation_section_enabled(
+  p_section_id uuid,
+  p_enabled boolean
+)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_presentation uuid;
+begin
+  select presentation_id into v_presentation
+    from public.presentation_sections where id = p_section_id;
+  if v_presentation is null then
+    raise exception 'SECTION_NOT_FOUND' using errcode = 'check_violation';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('sections:' || v_presentation::text));
+  update public.presentation_sections set enabled = p_enabled where id = p_section_id;
+end;
+$$;
+
+create or replace function public.delete_presentation_section(p_section_id uuid)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_presentation uuid;
+begin
+  select presentation_id into v_presentation
+    from public.presentation_sections where id = p_section_id;
+  if v_presentation is null then
+    return;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('sections:' || v_presentation::text));
+  delete from public.presentation_sections where id = p_section_id;
+end;
+$$;
+
+create or replace function public.reorder_presentation_sections(
+  p_presentation_id uuid,
+  p_ordered_ids uuid[]
+)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_id uuid;
+  v_pos integer := 0;
+begin
+  perform pg_advisory_xact_lock(hashtext('sections:' || p_presentation_id::text));
+  foreach v_id in array p_ordered_ids loop
+    update public.presentation_sections
+       set position = v_pos
+     where id = v_id and presentation_id = p_presentation_id;
+    v_pos := v_pos + 1;
+  end loop;
+end;
+$$;
+
+-- 6b-9) RPC — dokumenty (stejný vzor jako fotky)
+create or replace function public.register_presentation_document(
+  p_presentation_id uuid,
+  p_storage_path text,
+  p_name text,
+  p_category text,
+  p_description text,
+  p_file_type text,
+  p_file_size bigint
+)
+returns uuid
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_id uuid;
+  v_count integer;
+begin
+  if auth.uid() is null
+     or p_storage_path !~* ('^' || auth.uid()::text || '/' || p_presentation_id::text
+        || '/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(pdf|jpg|png|webp)$') then
+    raise exception 'DOCUMENT_BAD_PATH' using errcode = 'check_violation';
+  end if;
+  if p_name is null or char_length(btrim(p_name)) = 0 then
+    raise exception 'DOCUMENT_NO_NAME' using errcode = 'check_violation';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('documents:' || p_presentation_id::text));
+
+  select count(*) into v_count
+    from public.presentation_documents where presentation_id = p_presentation_id;
+  if v_count >= 30 then
+    raise exception 'DOCUMENT_LIMIT' using errcode = 'check_violation';
+  end if;
+
+  insert into public.presentation_documents
+    (presentation_id, name, category, description, storage_path, file_type, file_size_bytes, sort_order)
+  values (
+    p_presentation_id, left(btrim(p_name), 200), p_category, p_description,
+    p_storage_path, p_file_type, p_file_size,
+    coalesce((select max(sort_order) + 1 from public.presentation_documents
+              where presentation_id = p_presentation_id), 0)
+  )
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+create or replace function public.delete_presentation_document(p_document_id uuid)
+returns text
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_presentation uuid;
+  v_path text;
+begin
+  select presentation_id, storage_path into v_presentation, v_path
+    from public.presentation_documents where id = p_document_id;
+  if v_presentation is null then
+    return null;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('documents:' || v_presentation::text));
+  delete from public.presentation_documents where id = p_document_id;
+  return v_path;
+end;
+$$;
+
+create or replace function public.swap_document_order(
+  p_doc_a uuid,
+  p_doc_b uuid
+)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_presentation uuid;
+  v_order_a integer;
+  v_order_b integer;
+begin
+  select presentation_id into v_presentation
+    from public.presentation_documents where id = p_doc_a;
+  if v_presentation is null then
+    raise exception 'DOCUMENT_NOT_FOUND' using errcode = 'check_violation';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('documents:' || v_presentation::text));
+
+  select sort_order into v_order_a
+    from public.presentation_documents where id = p_doc_a;
+  select sort_order into v_order_b
+    from public.presentation_documents
+   where id = p_doc_b and presentation_id = v_presentation;
+  if v_order_a is null or v_order_b is null then
+    raise exception 'DOCUMENT_NOT_FOUND' using errcode = 'check_violation';
+  end if;
+
+  update public.presentation_documents set sort_order = -1        where id = p_doc_a;
+  update public.presentation_documents set sort_order = v_order_a where id = p_doc_b;
+  update public.presentation_documents set sort_order = v_order_b where id = p_doc_a;
+end;
+$$;
+
+-- 6b-10) LIMIT FOTEK 20 → 60 (přepis register_presentation_photo, jinak beze změny)
+create or replace function public.register_presentation_photo(
+  p_presentation_id uuid,
+  p_storage_path text
+)
+returns uuid
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_id uuid;
+  v_count integer;
+  v_has_hero boolean;
+begin
+  if auth.uid() is null
+     or p_storage_path !~* ('^' || auth.uid()::text || '/' || p_presentation_id::text
+        || '/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$') then
+    raise exception 'PHOTO_BAD_PATH' using errcode = 'check_violation';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('photos:' || p_presentation_id::text));
+
+  select count(*), coalesce(bool_or(is_hero), false)
+    into v_count, v_has_hero
+    from public.presentation_photos
+   where presentation_id = p_presentation_id;
+
+  if v_count >= 60 then
+    raise exception 'PHOTO_LIMIT' using errcode = 'check_violation';
+  end if;
+
+  insert into public.presentation_photos (presentation_id, storage_path, sort_order, is_hero)
+  values (
+    p_presentation_id,
+    p_storage_path,
+    coalesce((select max(sort_order) from public.presentation_photos
+               where presentation_id = p_presentation_id), 0) + 1,
+    not v_has_hero
+  )
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+-- 6b-11) BACKFILL — každé prezentaci bez sekcí založ výchozí sadu
+insert into public.presentation_sections (presentation_id, kind, position, enabled, content)
+select p.id, seed.kind, seed.position, true, seed.content
+from public.presentations p
+cross join (values
+  (0, 'hero',       '{}'::jsonb),
+  (1, 'gallery',    '{"heading":"Galerie"}'::jsonb),
+  (2, 'text',       '{"heading":"Příběh nemovitosti","source":"description"}'::jsonb),
+  (3, 'text',       '{"heading":"Lokalita a okolí","source":"location_text"}'::jsonb),
+  (4, 'text',       '{"heading":"Vybavení a přednosti","source":"features_text"}'::jsonb),
+  (5, 'parameters', '{}'::jsonb),
+  (6, 'contact',    '{}'::jsonb)
+) as seed(position, kind, content)
+where not exists (
+  select 1 from public.presentation_sections s where s.presentation_id = p.id
+);
+
+-- 6b-12) STORAGE — bucket dokumentů (privátní) + policies (v ochranném bloku)
+do $$
+begin
+  insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+  values ('presentation-documents', 'presentation-documents', false, 20971520,
+          array['application/pdf', 'image/jpeg', 'image/png', 'image/webp'])
+  on conflict (id) do update
+    set public = false,
+        file_size_limit = excluded.file_size_limit,
+        allowed_mime_types = excluded.allowed_mime_types;
+exception when insufficient_privilege or undefined_table then
+  raise notice 'BUCKET presentation-documents přeskočen (chybí práva na storage.*) — založ ho ručně.';
+end $$;
+
+do $$
+begin
+  execute $p$drop policy if exists "documents owner upload" on storage.objects$p$;
+  execute $p$
+    create policy "documents owner upload" on storage.objects
+      for insert to authenticated
+      with check (
+        bucket_id = 'presentation-documents'
+        and (storage.foldername(name))[1] = auth.uid()::text
+        and array_length(storage.foldername(name), 1) = 2
+        and (storage.foldername(name))[2] ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        and name ~* '\.(pdf|jpg|png|webp)$'
+        and exists (
+          select 1 from public.presentations p
+          where p.id = ((storage.foldername(name))[2])::uuid
+            and p.owner_id = auth.uid()
+        )
+      )
+  $p$;
+  execute $p$drop policy if exists "documents owner read" on storage.objects$p$;
+  execute $p$
+    create policy "documents owner read" on storage.objects
+      for select to authenticated
+      using (
+        bucket_id = 'presentation-documents'
+        and (storage.foldername(name))[1] = auth.uid()::text
+      )
+  $p$;
+  execute $p$drop policy if exists "documents owner delete" on storage.objects$p$;
+  execute $p$
+    create policy "documents owner delete" on storage.objects
+      for delete to authenticated
+      using (
+        bucket_id = 'presentation-documents'
+        and (storage.foldername(name))[1] = auth.uid()::text
+      )
+  $p$;
+  execute $p$drop policy if exists "documents public read published" on storage.objects$p$;
+  execute $p$
+    create policy "documents public read published" on storage.objects
+      for select to anon, authenticated
+      using (
+        bucket_id = 'presentation-documents'
+        and exists (
+          select 1
+          from public.presentation_documents d
+          join public.presentations p on p.id = d.presentation_id
+          where d.storage_path = name
+            and p.status = 'published'
+            and (storage.foldername(name))[1] = p.owner_id::text
+        )
+      )
+  $p$;
+exception when insufficient_privilege or undefined_table then
+  raise notice 'POLITIKY STORAGE pro dokumenty přeskočeny (chybí práva) — naklikej je ručně.';
+end $$;
+
+
+-- =====================================================================
+-- 6c) OTÍNSKÁ — KOLO 2/3: media bucket pro obrázky sekcí
+--     (migrace 20260715140000_otinska_round23) — půdorysy, fotky místností,
+--     analytické mapy, panorama. Veřejné čtení GENERICKY přes cestu (2. složka =
+--     prezentace musí být published, 1. složka = vlastník). add_presentation_section
+--     výše už má rozšířený whitelist o floorplans/analyticMaps/poi/panorama/
+--     socialProof/news.
+-- =====================================================================
+do $$
+begin
+  insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+  values ('presentation-media', 'presentation-media', false, 15728640,
+          array['image/jpeg', 'image/png', 'image/webp'])
+  on conflict (id) do update
+    set public = false,
+        file_size_limit = excluded.file_size_limit,
+        allowed_mime_types = excluded.allowed_mime_types;
+exception when insufficient_privilege or undefined_table then
+  raise notice 'BUCKET presentation-media přeskočen (chybí práva na storage.*) — založ ho ručně.';
+end $$;
+
+do $$
+begin
+  execute $p$drop policy if exists "media owner upload" on storage.objects$p$;
+  execute $p$
+    create policy "media owner upload" on storage.objects
+      for insert to authenticated
+      with check (
+        bucket_id = 'presentation-media'
+        and (storage.foldername(name))[1] = auth.uid()::text
+        and array_length(storage.foldername(name), 1) = 2
+        and (storage.foldername(name))[2] ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        and name ~* '\.(jpg|png|webp)$'
+        and exists (
+          select 1 from public.presentations p
+          where p.id = ((storage.foldername(name))[2])::uuid
+            and p.owner_id = auth.uid()
+        )
+      )
+  $p$;
+  execute $p$drop policy if exists "media owner read" on storage.objects$p$;
+  execute $p$
+    create policy "media owner read" on storage.objects
+      for select to authenticated
+      using (
+        bucket_id = 'presentation-media'
+        and (storage.foldername(name))[1] = auth.uid()::text
+      )
+  $p$;
+  execute $p$drop policy if exists "media owner delete" on storage.objects$p$;
+  execute $p$
+    create policy "media owner delete" on storage.objects
+      for delete to authenticated
+      using (
+        bucket_id = 'presentation-media'
+        and (storage.foldername(name))[1] = auth.uid()::text
+      )
+  $p$;
+  execute $p$drop policy if exists "media public read published" on storage.objects$p$;
+  execute $p$
+    create policy "media public read published" on storage.objects
+      for select to anon, authenticated
+      using (
+        bucket_id = 'presentation-media'
+        and exists (
+          select 1 from public.presentations p
+          where p.id::text = (storage.foldername(name))[2]
+            and p.status = 'published'
+            and (storage.foldername(name))[1] = p.owner_id::text
+        )
+      )
+  $p$;
+exception when insufficient_privilege or undefined_table then
+  raise notice 'POLITIKY STORAGE pro media přeskočeny (chybí práva) — naklikej je ručně.';
+end $$;
+
+
+-- =====================================================================
+-- 6e) BEZPEČNOSTNÍ DOROVNÁNÍ — Codex revize 2026-07-15 (H1–H5 část v SQL, M1–M2)
+--     Přehrává dřívější (děravé) definice poslední verzí (last-wins). Aditivní,
+--     nic se nemaže z dat. Detail viz REVIEW_CODEX_2026_07_15.md + migrace
+--     20260715180000_codex_security_hardening.sql (shodný obsah).
+-- =====================================================================
+
+-- H1) sekce: veřejně jen ZAPNUTÉ sekce publikované prezentace (owner vidí vše)
+drop policy if exists "sections public read published" on public.presentation_sections;
+create policy "sections public read published" on public.presentation_sections
+  for select
+  using (
+    enabled = true
+    and exists (
+      select 1 from public.presentations p
+      where p.id = presentation_id and p.status = 'published'
+    )
+  );
+
+-- H2) dokumenty (DB řádek): veřejně jen když je sekce `documents` ZAPNUTÁ
+drop policy if exists "documents public read published" on public.presentation_documents;
+create policy "documents public read published" on public.presentation_documents
+  for select
+  using (
+    exists (
+      select 1 from public.presentations p
+      where p.id = presentation_id and p.status = 'published'
+    )
+    and exists (
+      select 1 from public.presentation_sections s
+      where s.presentation_id = presentation_documents.presentation_id
+        and s.kind = 'documents'
+        and s.enabled = true
+    )
+  );
+
+-- H3+H4) MEDIA — registrace do DB + veřejné čtení přes ni + limit v DB
+create table if not exists public.presentation_media (
+  id              uuid primary key default gen_random_uuid(),
+  presentation_id uuid not null references public.presentations (id) on delete cascade,
+  section_id      uuid not null references public.presentation_sections (id) on delete cascade,
+  storage_path    text not null,
+  created_at      timestamptz not null default now()
+);
+comment on table public.presentation_media is
+  'Registrace obrázků sekcí (mapy, panorama, půdorysy). Veřejné čtení objektu v bucketu presentation-media stojí na EXISTENCI tohoto řádku u ZAPNUTÉ sekce PUBLISHED prezentace (H3/H4).';
+create index if not exists presentation_media_presentation_idx
+  on public.presentation_media (presentation_id);
+create index if not exists presentation_media_section_idx
+  on public.presentation_media (section_id);
+do $$
+begin
+  create unique index if not exists presentation_media_storage_path_key
+    on public.presentation_media (storage_path);
+exception when unique_violation then
+  raise notice 'INDEX presentation_media_storage_path_key neprošel: dva řádky míří na stejný soubor. Data jsem nechal být.';
+end $$;
+
+alter table public.presentation_media enable row level security;
+drop policy if exists "media rows owner all" on public.presentation_media;
+create policy "media rows owner all" on public.presentation_media
+  for all
+  using (exists (select 1 from public.presentations p
+                 where p.id = presentation_id and p.owner_id = auth.uid()))
+  with check (exists (select 1 from public.presentations p
+                 where p.id = presentation_id and p.owner_id = auth.uid()));
+drop policy if exists "media rows public read" on public.presentation_media;
+create policy "media rows public read" on public.presentation_media
+  for select
+  using (exists (
+    select 1
+    from public.presentation_sections s
+    join public.presentations p on p.id = s.presentation_id
+    where s.id = section_id
+      and s.enabled = true
+      and p.status = 'published'
+  ));
+
+create or replace function public.sync_presentation_media(
+  p_presentation_id uuid,
+  p_section_id uuid,
+  p_paths text[]
+)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_uuid   constant text := '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+  v_limit  constant integer := 1000;  -- hard cap; praktický strop drží slicy v UI (lib/media.ts)
+  v_paths  text[] := coalesce(p_paths, '{}');
+  v_other  integer;
+  v_new    integer;
+  v_path   text;
+begin
+  if auth.uid() is null then
+    raise exception 'MEDIA_NOT_OWNER' using errcode = 'check_violation';
+  end if;
+  if not exists (
+    select 1
+    from public.presentation_sections s
+    join public.presentations p on p.id = s.presentation_id
+    where s.id = p_section_id
+      and s.presentation_id = p_presentation_id
+      and p.owner_id = auth.uid()
+  ) then
+    raise exception 'MEDIA_NOT_OWNER' using errcode = 'check_violation';
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('media:' || p_presentation_id::text));
+
+  -- Očisti vstup: jen neprázdné a unikátní cesty (žádné NULL/prázdno → přesný delete i limit).
+  v_paths := array(select distinct t from unnest(v_paths) as t where t is not null and t <> '');
+
+  select count(*) into v_other
+    from public.presentation_media
+   where presentation_id = p_presentation_id
+     and section_id <> p_section_id;
+  v_new := coalesce(array_length(v_paths, 1), 0);
+  if v_other + v_new > v_limit then
+    raise exception 'MEDIA_LIMIT' using errcode = 'check_violation';
+  end if;
+
+  delete from public.presentation_media
+   where section_id = p_section_id
+     and not (storage_path = any (v_paths));
+
+  foreach v_path in array v_paths loop
+    if v_path !~* ('^' || auth.uid()::text || '/' || p_presentation_id::text
+        || '/' || v_uuid || '\.(jpg|png|webp)$') then
+      raise exception 'MEDIA_BAD_PATH' using errcode = 'check_violation';
+    end if;
+    insert into public.presentation_media (presentation_id, section_id, storage_path)
+    values (p_presentation_id, p_section_id, v_path)
+    on conflict (storage_path) do update set section_id = excluded.section_id;
+  end loop;
+end;
+$$;
+
+-- BACKFILL registrace z obsahu sekcí (idempotentní), ať se publikované nerozbijí.
+insert into public.presentation_media (presentation_id, section_id, storage_path)
+select s.presentation_id, s.id, s.content->>'image_path'
+from public.presentation_sections s
+where s.kind = 'panorama' and coalesce(s.content->>'image_path', '') <> ''
+on conflict (storage_path) do nothing;
+
+insert into public.presentation_media (presentation_id, section_id, storage_path)
+select s.presentation_id, s.id, item->>'image_path'
+from public.presentation_sections s
+cross join lateral jsonb_array_elements(
+  case when jsonb_typeof(s.content->'items') = 'array' then s.content->'items' else '[]'::jsonb end
+) as item
+where s.kind = 'analyticMaps' and coalesce(item->>'image_path', '') <> ''
+on conflict (storage_path) do nothing;
+
+insert into public.presentation_media (presentation_id, section_id, storage_path)
+select s.presentation_id, s.id, fl->>'image_path'
+from public.presentation_sections s
+cross join lateral jsonb_array_elements(
+  case when jsonb_typeof(s.content->'floors') = 'array' then s.content->'floors' else '[]'::jsonb end
+) as fl
+where s.kind = 'floorplans' and coalesce(fl->>'image_path', '') <> ''
+on conflict (storage_path) do nothing;
+
+insert into public.presentation_media (presentation_id, section_id, storage_path)
+select s.presentation_id, s.id, room->>'image_path'
+from public.presentation_sections s
+cross join lateral jsonb_array_elements(
+  case when jsonb_typeof(s.content->'floors') = 'array' then s.content->'floors' else '[]'::jsonb end
+) as fl
+cross join lateral jsonb_array_elements(
+  case when jsonb_typeof(fl->'rooms') = 'array' then fl->'rooms' else '[]'::jsonb end
+) as room
+where s.kind = 'floorplans' and coalesce(room->>'image_path', '') <> ''
+on conflict (storage_path) do nothing;
+
+-- M1) integrita sekcí v DB: unikátní index na singletony + trigger whitelistu typů
+do $$
+begin
+  create unique index if not exists presentation_sections_singleton_key
+    on public.presentation_sections (presentation_id, kind)
+    where kind in (
+      'hero','parameters','contact','map','gallery','documents',
+      'floorplans','analyticMaps','poi','panorama','socialProof','news',
+      'video','investmentCalc','chatbot'
+    );
+exception when unique_violation then
+  raise notice 'INDEX presentation_sections_singleton_key neprošel: duplicitní singleton sekce. Data jsem nechal být — přebytek smaž ručně.';
+end $$;
+
+create or replace function public.guard_presentation_section_kind()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if new.kind not in (
+    'hero','text','parameters','gallery','map','benefits',
+    'documents','valuation','technicalCondition','contact',
+    'floorplans','analyticMaps','poi','panorama','socialProof','news',
+    'video','investmentCalc'
+  ) then
+    raise exception 'SECTION_KIND_NOT_ALLOWED' using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists presentation_sections_guard_kind on public.presentation_sections;
+create trigger presentation_sections_guard_kind
+  before insert or update of kind on public.presentation_sections
+  for each row execute function public.guard_presentation_section_kind();
+
+-- M2) buckety: znovu vynuť limity (allowed_mime_types + file_size_limit) — oba
+do $$
+begin
+  insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+  values ('presentation-documents', 'presentation-documents', false, 20971520,
+          array['application/pdf', 'image/jpeg', 'image/png', 'image/webp'])
+  on conflict (id) do update
+    set public = false, file_size_limit = excluded.file_size_limit,
+        allowed_mime_types = excluded.allowed_mime_types;
+  insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+  values ('presentation-media', 'presentation-media', false, 15728640,
+          array['image/jpeg', 'image/png', 'image/webp'])
+  on conflict (id) do update
+    set public = false, file_size_limit = excluded.file_size_limit,
+        allowed_mime_types = excluded.allowed_mime_types;
+exception when insufficient_privilege or undefined_table then
+  raise notice 'BUCKETY: limity nešly nastavit (chybí práva na storage.*) — srovnej ručně.';
+end $$;
+
+-- H2+H3) Storage policies: dokumenty a media veřejně jen přes DB vazbu
+do $$
+begin
+  execute $p$drop policy if exists "documents public read published" on storage.objects$p$;
+  execute $p$
+    create policy "documents public read published" on storage.objects
+      for select to anon, authenticated
+      using (
+        bucket_id = 'presentation-documents'
+        and exists (
+          select 1
+          from public.presentation_documents d
+          join public.presentations p on p.id = d.presentation_id
+          where d.storage_path = name
+            and p.status = 'published'
+            and (storage.foldername(name))[1] = p.owner_id::text
+            and exists (
+              select 1 from public.presentation_sections s
+              where s.presentation_id = d.presentation_id
+                and s.kind = 'documents'
+                and s.enabled = true
+            )
+        )
+      )
+  $p$;
+
+  execute $p$drop policy if exists "media public read published" on storage.objects$p$;
+  execute $p$
+    create policy "media public read published" on storage.objects
+      for select to anon, authenticated
+      using (
+        bucket_id = 'presentation-media'
+        and exists (
+          select 1
+          from public.presentation_media m
+          join public.presentation_sections s on s.id = m.section_id
+          join public.presentations p on p.id = m.presentation_id
+          where m.storage_path = name
+            and s.enabled = true
+            and p.status = 'published'
+            and (storage.foldername(name))[1] = p.owner_id::text
+        )
+      )
+  $p$;
+exception when insufficient_privilege or undefined_table then
+  raise notice 'POLITIKY STORAGE (dokumenty/media) nešly přehrát (chybí práva) — naklikej ručně.';
+end $$;
+
+-- =====================================================================
 -- 7) KONTROLA — co má existovat, existuje?
 --    Ve sloupci `stav` musí být VŠUDE „✅ je".
 -- =====================================================================
@@ -867,7 +1964,13 @@ select 'tabulka' as co, t.name as nazev,
             then '✅ je' else '❌ CHYBÍ' end as stav
 from (values
   ('profiles'), ('presentations'), ('presentation_photos'),
-  ('payments'), ('stripe_events')
+  ('payments'), ('stripe_events'),
+  -- Otínská — sekce a doprovodné tabulky
+  ('presentation_sections'), ('presentation_documents'),
+  ('presentation_floors'), ('presentation_rooms'),
+  ('presentation_maps'), ('presentation_places'), ('presentation_panoramas'),
+  -- Codex 2026-07-15 — registrace médií
+  ('presentation_media')
 ) as t(name)
 
 union all
@@ -889,11 +1992,28 @@ from (values
   ('presentations','location_text'), ('presentations','features_text'),
   ('presentations','contact_name'), ('presentations','contact_email'),
   ('presentations','contact_phone'), ('presentations','published_at'),
+  -- Otínská — nová pole nemovitosti
+  ('presentations','subtitle'), ('presentations','year_built'),
+  ('presentations','floors'), ('presentations','built_area_m2'),
+  ('presentations','building_dimensions'), ('presentations','condition'),
+  ('presentations','ownership'), ('presentations','monthly_costs_czk'),
+  ('presentations','lat'), ('presentations','lng'), ('presentations','target_persona'),
   -- profil
   ('profiles','full_name'), ('profiles','phone'),
   -- fotky
   ('presentation_photos','presentation_id'), ('presentation_photos','storage_path'),
   ('presentation_photos','is_hero'), ('presentation_photos','sort_order'),
+  ('presentation_photos','caption'), ('presentation_photos','category'),
+  ('presentation_photos','room_id'),
+  -- sekce + dokumenty
+  ('presentation_sections','presentation_id'), ('presentation_sections','kind'),
+  ('presentation_sections','position'), ('presentation_sections','enabled'),
+  ('presentation_sections','content'),
+  ('presentation_documents','presentation_id'), ('presentation_documents','name'),
+  ('presentation_documents','storage_path'), ('presentation_documents','sort_order'),
+  -- Codex 2026-07-15 — registrace médií
+  ('presentation_media','presentation_id'), ('presentation_media','section_id'),
+  ('presentation_media','storage_path'),
   -- platby
   ('payments','presentation_id'), ('payments','status'), ('payments','provider'),
   ('payments','provider_payment_id'), ('payments','stripe_session_id'),
@@ -914,7 +2034,20 @@ from (values
   ('public.unpublish_when_unpaid()'),
   ('public.enforce_photo_path()'),
   ('public.handle_new_user()'),
-  ('public.set_updated_at()')
+  ('public.set_updated_at()'),
+  -- Otínská — sekce
+  ('public.add_presentation_section(uuid, text)'),
+  ('public.move_presentation_section(uuid, text)'),
+  ('public.set_presentation_section_enabled(uuid, boolean)'),
+  ('public.delete_presentation_section(uuid)'),
+  ('public.reorder_presentation_sections(uuid, uuid[])'),
+  -- Otínská — dokumenty
+  ('public.register_presentation_document(uuid, text, text, text, text, text, bigint)'),
+  ('public.delete_presentation_document(uuid)'),
+  ('public.swap_document_order(uuid, uuid)'),
+  -- Codex 2026-07-15 — registrace médií + strážce typu sekce
+  ('public.sync_presentation_media(uuid, uuid, text[])'),
+  ('public.guard_presentation_section_kind()')
 ) as f(sig)
 
 union all
@@ -929,7 +2062,9 @@ from (values
   ('auth.users',                'on_auth_user_created'),
   ('public.presentations',      'presentations_enforce_paid_before_publish'),
   ('public.presentation_photos','presentation_photos_enforce_path'),
-  ('public.payments',           'payments_unpublish_when_unpaid')
+  ('public.payments',           'payments_unpublish_when_unpaid'),
+  -- Codex 2026-07-15 — strážce povolených typů sekcí
+  ('public.presentation_sections','presentation_sections_guard_kind')
 ) as tg(tbl, name)
 
 union all
@@ -948,13 +2083,43 @@ from (values
   ('presentations','presentations public read published'),
   ('presentation_photos','photos owner all'),
   ('presentation_photos','photos public read published'),
-  ('payments','payments owner read')
+  ('payments','payments owner read'),
+  -- Otínská — sekce a doprovodné tabulky
+  ('presentation_sections','sections owner all'),
+  ('presentation_sections','sections public read published'),
+  ('presentation_documents','documents owner all'),
+  ('presentation_documents','documents public read published'),
+  ('presentation_floors','floors owner all'),
+  ('presentation_floors','floors public read published'),
+  ('presentation_rooms','rooms owner all'),
+  ('presentation_rooms','rooms public read published'),
+  ('presentation_maps','maps owner all'),
+  ('presentation_maps','maps public read published'),
+  ('presentation_places','places owner all'),
+  ('presentation_places','places public read published'),
+  ('presentation_panoramas','panoramas owner all'),
+  ('presentation_panoramas','panoramas public read published'),
+  -- Codex 2026-07-15 — registrace médií
+  ('presentation_media','media rows owner all'),
+  ('presentation_media','media rows public read')
 ) as p(tbl, pol)
 
 union all
 select 'úložiště', 'bucket presentation-photos',
        case when exists (
          select 1 from storage.buckets where id = 'presentation-photos'
+       ) then '✅ je' else '❌ CHYBÍ' end
+
+union all
+select 'úložiště', 'bucket presentation-documents',
+       case when exists (
+         select 1 from storage.buckets where id = 'presentation-documents'
+       ) then '✅ je' else '❌ CHYBÍ' end
+
+union all
+select 'úložiště', 'bucket presentation-media',
+       case when exists (
+         select 1 from storage.buckets where id = 'presentation-media'
        ) then '✅ je' else '❌ CHYBÍ' end
 
 union all
@@ -969,7 +2134,15 @@ from (values
   ('photos owner upload'),
   ('photos owner read'),
   ('photos owner delete'),
-  ('photos public read published')
+  ('photos public read published'),
+  ('documents owner upload'),
+  ('documents owner read'),
+  ('documents owner delete'),
+  ('documents public read published'),
+  ('media owner upload'),
+  ('media owner read'),
+  ('media owner delete'),
+  ('media public read published')
 ) as s(pol)
 
 order by 1, 2;

@@ -13,7 +13,7 @@ export const PHOTOS_BUCKET = "presentation-photos";
 export const MAX_PHOTO_BYTES = 8 * 1024 * 1024; // 8 MB
 
 /** Max počet fotek na prezentaci (hero + galerie dohromady). */
-export const MAX_PHOTOS_PER_PRESENTATION = 20;
+export const MAX_PHOTOS_PER_PRESENTATION = 60;
 
 /** Povolené typy obrázků: MIME → přípona souboru. */
 export const ALLOWED_IMAGE_TYPES: Record<string, string> = {
@@ -24,7 +24,7 @@ export const ALLOWED_IMAGE_TYPES: Record<string, string> = {
 
 /** Lidský popis limitů do UI. */
 export const PHOTO_LIMITS_HINT =
-  "JPEG, PNG nebo WebP, každá max 8 MB, celkem nejvýš 20 fotek.";
+  "JPEG, PNG nebo WebP, každá max 8 MB, celkem nejvýš 60 fotek.";
 
 /**
  * Poznej typ obrázku podle prvních bajtů souboru (magic bytes).

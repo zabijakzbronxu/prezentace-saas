@@ -76,3 +76,76 @@ export function SchemaErrorScreen({
     </main>
   );
 }
+
+// Hlasitá, ale OBECNÁ chyba dotazu (ne chybějící schéma): dotaz do databáze
+// skutečně selhal. Místo tichého „prázdna" (které vypadá zeleně, i když se něco
+// pokazilo) ukážeme, že se stránka nenačetla — návštěvníkovi „zkuste to za chvíli",
+// vlastníkovi/Karlovi navíc technický detail.
+export function QueryErrorScreen({
+  detail,
+  backHref = "/",
+  backLabel = "← zpět na úvod",
+}: {
+  /** Původní hláška z databáze — technický detail pro Karla / vývojáře. */
+  detail?: string | null;
+  backHref?: string;
+  backLabel?: string;
+}) {
+  return (
+    <main
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "3rem 1.5rem",
+        gap: "1.25rem",
+      }}
+    >
+      <div
+        style={{
+          width: "38rem",
+          maxWidth: "100%",
+          display: "flex",
+          flexDirection: "column",
+          gap: "1rem",
+          border: "1px solid rgba(248,113,113,0.35)",
+          background: "rgba(248,113,113,0.08)",
+          borderRadius: "12px",
+          padding: "1.5rem",
+        }}
+      >
+        <h1 style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fca5a5" }}>
+          Stránka se teď nenačetla
+        </h1>
+
+        <p style={{ lineHeight: 1.6 }}>
+          Při načítání dat došlo k chybě. Zkuste to prosím za chvíli znovu — pokud potíž
+          přetrvává, dejte nám vědět.
+        </p>
+
+        {detail ? (
+          <p
+            style={{
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              fontSize: "0.8rem",
+              color: "var(--muted)",
+              background: "rgba(0,0,0,0.25)",
+              border: "1px solid #334155",
+              borderRadius: "8px",
+              padding: "0.6rem 0.8rem",
+              overflowWrap: "anywhere",
+            }}
+          >
+            {detail}
+          </p>
+        ) : null}
+
+        <Link href={backHref} style={{ color: "var(--accent)" }}>
+          {backLabel}
+        </Link>
+      </div>
+    </main>
+  );
+}

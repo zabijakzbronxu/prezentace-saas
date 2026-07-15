@@ -132,7 +132,8 @@ const STEPS = [
   { key: "edit", n: 1, title: "Základ" },
   { key: "photos", n: 2, title: "Fotky" },
   { key: "texts", n: 3, title: "Texty" },
-  { key: "publish", n: 4, title: "Zveřejnit" },
+  { key: "sections", n: 4, title: "Sekce" },
+  { key: "publish", n: 5, title: "Zveřejnit" },
 ] as const;
 
 export type WizardStep = (typeof STEPS)[number]["key"];

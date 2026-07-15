@@ -56,6 +56,33 @@ Fakta a rozhodnutí, která musí přežít mezi konverzacemi. Co tu není zapsa
 - ⚠️ **Stav 2026-07-14: kód napsaný, ale STROJOVĚ NEOVĚŘENÝ** (sandboxu došlo místo na disku
   → nešly testy, build ani commit). Ověření a commit jsou na Karlovi, viz `tasks/kroky-pro-karla.md`.
 
+## Rozhodnutí (2026-07-15, oprava Codex nálezů nad Otínskou) — kód napsán, STROJOVĚ NEOVĚŘENO
+
+- **Veřejné čtení = vždy navázané na „zapnuto + published“, ne jen „published“.** Anon
+  SELECT policy na `presentation_sections` vyžaduje `enabled=true` A published (H1).
+  Dokumenty (DB řádek i Storage objekt) veřejné jen když je sekce `documents` zapnutá (H2).
+- **Média mají teď vlastní registrační tabulku `presentation_media`** (řádek = jeden
+  obrázek sekce, `section_id` s `on delete cascade`). Veřejné čtení objektu z bucketu
+  `presentation-media` stojí na EXISTENCI toho řádku u zapnuté sekce published prezentace
+  (H3) — vzor jako `presentation-photos`. Registruje ji server-side RPC
+  `sync_presentation_media` volaná při uložení sekce (analyticMaps/panorama/floorplans);
+  **limit `MAX_MEDIA_PER_PRESENTATION=1000` je vynucený v DB** (H4). Backfill v migraci
+  zaregistruje existující obrázky, aby se publikované prezentace nerozbily.
+- **XSS hráz na URL: `safeExternalUrl()` v `lib/presentations/sections.ts`** — povolí jen
+  `http/https` (staví na `new URL`, chytí i `java\tscript:`). Čtou ji readery obsahu
+  (render) i validace při zápisu. `mailto:`/`tel:` se skládají zvlášť s pevnou předponou.
+- **Integrita sekcí drží DB, ne jen RPC** (M1): unikátní parciální index na singleton
+  typy + trigger `guard_presentation_section_kind` (whitelist = ready typy; `chatbot`
+  a nedodělané se přímým insertem nepustí).
+- **Veřejná stránka: chyba dotazu ≠ prázdno** (M3). Nový `QueryErrorScreen` (vedle
+  `SchemaErrorScreen`) — skutečná chyba sekcí/fotek/dokumentů ukáže hlasitou hlášku,
+  ne tichý fallback.
+- ⚠️ **Vedlejší efekt H1 (ke schválení Karlem):** publikovaná prezentace s VYPNUTÝMI VŠEMI
+  sekcemi ukáže výchozí sadu sekcí (ne prázdno) — není únik, viz `REVIEW_CODEX_2026_07_15.md`.
+- ⚠️ **Stav: kód napsaný, křížově zrevidovaný (žádný blokátor), ale STROJOVĚ NEOVĚŘENÝ**
+  (sandbox bez místa) → migrace + `npm test/typecheck/lint/build` + commit jsou na Karlovi
+  (příkazy v `REVIEW_CODEX_2026_07_15.md`).
+
 ## Technická poznámka (prostředí Cowork)
 
 - Sandbox v Cowork neumí mazat gitové `.lock` soubory na Desktopu → po každé git operaci zůstane stale `index.lock`. Řešení: přesunout ho stranou souborovým nástrojem (move na `*.stale`) před další git operací. V Claude Code (nativně) tento problém nebude.

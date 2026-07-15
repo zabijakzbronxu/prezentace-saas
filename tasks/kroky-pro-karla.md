@@ -532,3 +532,99 @@ zpráv**. Druhé doručení té samé zprávy prostě přeskočíme — nikdo ne
   Skutečné „hotovo" je až po kroku 6.
 - **Necommitnul jsem** — příkaz je v kroku 0.
 - **Nepushnul jsem.**
+
+---
+
+# 2026-07-15 — OTÍNSKÁ: stavebnice sekcí (kolo 1) + kolo 2/3 (půdorysy, mapy, POI, reference, novinky, panorama)
+
+## Poctivé přiznání (jako minule)
+
+**Nespustil jsem testy, build ani migrace** — prostředí, kde příkazy pouštím, bylo
+mimo provoz (došlé místo). **Kód je hotový a na disku, ale strojově NEOVĚŘENÝ.**
+Neříkám, že je zeleno, když jsem to neviděl. Prošel jsem to dvěma nezávislými
+revizemi (čtením) a opravil nálezy — ale to není náhrada za testy. První krok je
+proto ověření u tebe. Do té doby ber celou věc jako **hotové-neověřené**.
+
+## Co je nového (laicky)
+
+Prezentace už není 3 napevno bloky, ale **stavebnice sekcí**: v průvodci přibyl
+**krok „Sekce"** (nově Základ → Fotky → Texty → **Sekce** → Zveřejnit), kde sekce
+přeskládáš, zapneš/vypneš, přidáš a vyplníš. Umí se těchto **16 typů** sekcí:
+úvodní blok (hero), text, parametry+PENB, galerie s popisky, mapa, přednosti,
+dokumenty ke stažení, porovnání cen/odhady, technický stav, kontakt (kolo 1) —
+a nově **půdorysy pater, analytické mapy, body zájmu, reference, novinky, panorama**
+(kolo 2/3). Ještě zamčené (přijde později): video, investiční kalkulačka, chatbot.
+
+Veřejná stránka `/listing/<slug>` renderuje **jen zapnuté sekce ve tvém pořadí**.
+Nedodělané sekce se návštěvníkovi nezobrazí.
+
+## Udělej v tomhle pořadí
+
+### 1. Migrace databáze
+`supabase.com/dashboard` → SQL Editor → New query → vlož a **Run** celý obsah
+**`app/supabase/APLIKUJ_VSE.sql`** (idempotentní — jde spustit i opakovaně; obsahuje
+kolo 1 i 2/3 najednou). Dole musí být v kontrolní tabulce ve sloupci `stav`
+**všude ✅ je**. Kde je ❌ (hlavně buckety `presentation-documents` a
+`presentation-media`, kdyby Supabase nepustil `storage.*` z editoru), napiš mi.
+
+Na Macu si obsah zkopíruješ do schránky takhle:
+```
+cat "~/Desktop/prezentace-saas/app/supabase/APLIKUJ_VSE.sql" | pbcopy
+```
+
+### 2. Ověření kódu (u tebe)
+```
+cd ~/Desktop/prezentace-saas/app
+npm test && npm run typecheck && npm run lint && npm run build
+```
+Testy jsem **nespouštěl** — neuvádím číslo. Když něco spadne, pošli mi výpis, opravím.
+
+### 3. Klik v prohlížeči
+`npm run dev` → přihlas se → prezentace → krok **Sekce**. Přidej pár sekcí
+(např. Půdorysy, Analytické mapy, Body zájmu), vyplň je, u obrázkových sekcí nahraj
+obrázky, přeskládej šipkami, něco vypni. Pak **Náhled ↗** a zkontroluj, že se
+sekce zobrazují ve zvoleném pořadí a nic se nerozbilo.
+
+### 4. Commity (rozdělené) — z kořene repa
+Přesné příkazy jsou ve zprávě v chatu (rozdělené na 1A/1B/1C a kolo 2/3). Kvůli
+hranatým závorkám v cestách používej `GIT_LITERAL_PATHSPECS=1 git add '…'`.
+
+## ⚠ Co vyžaduje TVŮJ klíč nebo službu (zatím NEHOTOVO — schválně)
+
+Nic z toho jsem **nefejkoval**. Postavené je jen to, co jde bez cizí služby.
+
+1. **Body zájmu (POI) — automatické načítání z Google Places** = BUDOUCNOST.
+   Teď funguje **ruční** zadávání míst (název, kategorie, vzdálenost) — to stačí a
+   nic nestojí. Živé napojení na mapy (aby se místa v okolí načetla sama) vyžaduje
+   **Google Maps / Places API klíč** a je **placené** (podle počtu dotazů).
+   - *Co zařídit, až budeš chtít:* v Google Cloud Console založit projekt, zapnout
+     **Places API**, vygenerovat API klíč, dát ho do prostředí (např.
+     `GOOGLE_PLACES_API_KEY` ve Vercelu). Pak doděláme tlačítko „načíst okolí".
+   - Do té doby zůstává ruční zadávání — je plně funkční.
+
+2. **360° panorama — interaktivní otáčení** = BUDOUCNOST.
+   Teď: nahraješ panorama fotku a na veřejné stránce se ukáže jako **velký obrázek**
+   s poznámkou „interaktivní 360° otáčení připravujeme". Skutečné otáčení potřebuje
+   3D knihovnu (např. Pannellum / Three.js) — nechtěl jsem ji přidávat naslepo bez
+   možnosti to u sebe ověřit, a hlavně **nefejkovat** interaktivitu, která nefunguje.
+   - *Co zařídit:* nic od tebe (žádný klíč). Je to čistě práce na příště — až bude
+     jak ověřit, přidám lehký prohlížeč panoramat.
+
+3. **Analytické mapy** — tady **žádný klíč netřeba**. Obrázky map (screenshoty
+   z hlukových / oslunění / dopravních map) **nahráváš ty** a k nim napíšeš „proč
+   je to důležité". Na veřejné stránce se ukážou v tabech. Hotové a plné.
+
+## Nový bucket úložiště
+
+Kolo 2/3 přidalo privátní bucket **`presentation-media`** (obrázky půdorysů, fotek
+místností, analytických map a panoramat; max 15 MB, jen JPEG/PNG/WebP). Zakládá ho
+`APLIKUJ_VSE.sql` sám. Veřejně jsou tyhle obrázky čitelné **jen u publikované**
+prezentace (stejná logika jako u fotek).
+
+## Rizika / rollback
+
+- **Riziko:** velká změna editoru i veřejné stránky. Pojistka „nikdy prázdno"
+  (když nejsou sekce, dopočítají se výchozí) + staré sloupce se nemažou.
+- **Rollback:** migrace je aditivní (nové tabulky/bucket/funkce); kód přes
+  `git revert`. Stará cesta funguje dál.
+- **Neověřeno strojově** — viz krok 2. Skutečné „hotovo" je až po tvém testu + kliku.

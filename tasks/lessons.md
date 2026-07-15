@@ -2,6 +2,42 @@
 
 Po každé korekci od Karla sem zapiš vzorec chyby a pravidlo, které ji příště nedovolí (a doplň ho do RULES.md).
 
+## 2026-07-15 — nálezy Codex revize nad Otínskou (technické vzorce, ne korekce Karla)
+Vzorec 1: **veřejné čtení bránil jen stav `published`, ne „zapnuto“.** Vypnuté sekce
+i jejich dokumenty/obrázky šly přes přímý PostgREST/Storage stáhnout, i když je na
+stránce nebylo vidět. UI filtr `enabled` je jen kosmetika.
+Pravidlo: veřejná (anon) SELECT/Storage policy musí vázat čtení na **skutečný stav
+viditelnosti** (`enabled=true` u sekce, published u prezentace), ne jen na published.
+Když je viditelnost hranice, patří do policy, ne do Reactu.
+
+Vzorec 2: **přímý upload klienta do Storage bez DB registrace → veřejné čtení jen podle
+cesty** pouští osiřelé / z vypnuté sekce vyřazené soubory. Fotky/dokumenty to řeší
+registračním řádkem + policy `EXISTS join na tabulku`; média neměla tabulku vůbec.
+Pravidlo: každý „klient → přímo do bucketu“ tok potřebuje **DB řádek na objekt** a
+veřejné čtení navázané na jeho EXISTENCI (+ published + zapnutá sekce). Limit počtu
+vynutit v DB (RPC/constraint), ne v UI. Vzor kopíruj z `presentation-photos`.
+
+Vzorec 3: **XSS přes uživatelskou URL v `href`.** Validace při zápisu (regex `^https?`)
+je obejitelná přímým PATCH na JSONB `content` — vlastník tak zasáhne návštěvníky své
+published stránky. Render byl bez sanitizace.
+Pravidlo: uživatelskou URL do `href` **vždy projeď `safeExternalUrl()` při RENDERU**
+(povol jen http/https; stav na `new URL`, ať chytneš i `java\tscript:` — parser tab/newline
+odstraní stejně jako prohlížeč). Validace při zápisu je jen druhá vrstva. `mailto:`/`tel:`
+skládej s pevnou předponou, ať schéma nejde přepsat.
+
+Vzorec 4 (opakuje 2026-07-13 vzorec 3): **integritu držela jen RPC, ne DB.** RLS
+`owner all` pustí vlastníka přímým insertem do `presentation_sections` obejít whitelist
+i singletony (duplicitní hero, `chatbot`, …).
+Pravidlo: co je integritní pravidlo, vynuť **constraintem/triggerem/unikátním indexem
+na tabulce**, ne uvnitř jedné funkce, kterou lze obejít přímým PostgREST. Whitelist
+a singleton sady v SQL musí sedět s `SECTION_CATALOG` (drží to test).
+
+Vzorec 5 (proces): opravy proběhly, ale **sandbox zase bez místa** → `npm test/typecheck/
+lint/build` ani migrace NEBĚŽELY. Zapsáno jako HOTOVÉ-NEOVĚŘENÉ, ověření + commit na Karlovi.
+Křížovou revizi udělal čerstvý agent čtením kódu (žádný blokátor). RLS „kontrakt“ nejde
+otestovat vitestem bez DB → dodán jako **spustitelný SQL** v `checks/security-check.md`
+(vč. tvrdého důkazu `set local role anon`).
+
 ## 2026-07-14 — migrace se aplikují ručně → databáze se rozejde s kódem
 Vzorec 1: **projekt nemá `supabase link`**, migrace Karel kopíruje do SQL Editoru ručně. Jednu přeskočí a aplikace padá na `column … does not exist`. Nic mu neřeklo, KTERÁ migrace chybí.
 Pravidlo: držet v repu **`app/supabase/APLIKUJ_VSE.sql`** — konsolidovaný, idempotentní skript se všemi migracemi + Storage. Při každé nové migraci ho aktualizovat. Karel má jednu instrukci: „vlož a spusť", ne „najdi, co ti chybí".
