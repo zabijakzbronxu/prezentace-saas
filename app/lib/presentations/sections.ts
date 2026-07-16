@@ -514,9 +514,63 @@ export function readPanoramaContent(content: unknown): PanoramaContent {
   };
 }
 
-// ---- Kolo 2: půdorysy pater ----------------------------------------
-export type FloorRoom = { name: string; area?: string; description?: string; image_path?: string };
-export type FloorItem = { label: string; image_path?: string; rooms: FloorRoom[] };
+// ---- Kolo 2: půdorysy pater — kompas + klikací špendlíky -------------
+// x/y = pozice špendlíku místnosti v PROCENTECH plánu (0–100), ať sedí při každé
+// velikosti obrázku. compass = natočení severu ve stupních (0–360). Obojí volitelné:
+// stará data bez x/y/compass se čtou dál (místnost → jen do seznamu, patro → bez
+// růžice). polygon = varianta B (obtažení obrysu) — jen se přečte a uchová, kreslicí
+// UI zatím není (viz tasks/pudorysy-varianta-B.md).
+
+/** Procento pozice 0–100 z čísla i řetězce; mimo rozsah ořízne, nesmysl → undefined. */
+export function clampFloorPercent(v: unknown): number | undefined {
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() ? Number(v) : NaN;
+  if (!Number.isFinite(n)) return undefined;
+  const clamped = Math.min(100, Math.max(0, n));
+  return Math.round(clamped * 100) / 100; // 2 desetinná místa stačí
+}
+
+/** Stupně kompasu normalizované do <0,360) z čísla i řetězce; nesmysl → undefined. */
+export function normalizeCompassDeg(v: unknown): number | undefined {
+  const n = typeof v === "number" ? v : typeof v === "string" && v.trim() ? Number(v) : NaN;
+  if (!Number.isFinite(n)) return undefined;
+  const mod = ((n % 360) + 360) % 360; // -90 → 270, 360 → 0, 450 → 90
+  return Math.round(mod * 10) / 10; // 1 desetinné místo
+}
+
+export type RoomPolygonPoint = { x: number; y: number };
+/** Varianta B: obrys místnosti jako body v %. Platný jen se 3+ body, jinak undefined. */
+export function readRoomPolygon(v: unknown): RoomPolygonPoint[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const pts = v
+    .map((pt): RoomPolygonPoint | null => {
+      const p = (pt ?? {}) as Record<string, unknown>;
+      const x = clampFloorPercent(p.x);
+      const y = clampFloorPercent(p.y);
+      return x !== undefined && y !== undefined ? { x, y } : null;
+    })
+    .filter((p): p is RoomPolygonPoint => p !== null)
+    .slice(0, 100);
+  return pts.length >= 3 ? pts : undefined;
+}
+
+export type FloorRoom = {
+  name: string;
+  area?: string;
+  description?: string;
+  image_path?: string;
+  /** Pozice špendlíku na plánu v % (0–100). Platí jen když je vyplněné OBOJÍ (jinak jen v seznamu). */
+  x?: number;
+  y?: number;
+  /** Varianta B — obrys místnosti (zatím se nekreslí). */
+  polygon?: RoomPolygonPoint[];
+};
+export type FloorItem = {
+  label: string;
+  image_path?: string;
+  /** Natočení severu 0–360°, volitelné. */
+  compass?: number;
+  rooms: FloorRoom[];
+};
 export type FloorplansContent = { heading?: string; floors: FloorItem[] };
 export function readFloorplansContent(content: unknown): FloorplansContent {
   const c = (content ?? {}) as Record<string, unknown>;
@@ -527,20 +581,27 @@ export function readFloorplansContent(content: unknown): FloorplansContent {
       const image_path = asString(f.image_path);
       // Patro bez názvu i bez plánu je prázdné → vypadne.
       if (!label && !image_path) return null;
+      const compass = normalizeCompassDeg(f.compass);
       const rooms = asArray(f.rooms)
         .map((rr): FloorRoom | null => {
           const r = (rr ?? {}) as Record<string, unknown>;
           const name = asString(r.name);
           if (!name) return null;
+          const x = clampFloorPercent(r.x);
+          const y = clampFloorPercent(r.y);
+          const hasPin = x !== undefined && y !== undefined; // špendlík dává smysl jen s oběma
           return {
             name,
             area: asString(r.area),
             description: asString(r.description),
             image_path: asString(r.image_path),
+            x: hasPin ? x : undefined,
+            y: hasPin ? y : undefined,
+            polygon: readRoomPolygon(r.polygon),
           };
         })
         .filter((x): x is FloorRoom => x !== null);
-      return { label: label ?? "Patro", image_path, rooms };
+      return { label: label ?? "Patro", image_path, compass, rooms };
     })
     .filter((x): x is FloorItem => x !== null);
   return { heading: asString(c.heading), floors };

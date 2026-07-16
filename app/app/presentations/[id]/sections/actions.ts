@@ -7,6 +7,7 @@ import type { Json } from "@/lib/database.types";
 import { isUuid } from "@/lib/presentations/form";
 import { isMissingSchemaError } from "@/lib/db-errors";
 import { isReadyKind, isSectionKind } from "@/lib/presentations/sections";
+import { isSafeDesignReturnTo } from "@/lib/presentations/design";
 import {
   OTINSKA_PRESENTATION_FIELDS,
   OTINSKA_SECTION_SEEDS,
@@ -33,10 +34,28 @@ export type SectionsErrorCode =
   | "seed-failed"
   | "schema";
 
+function sectionsPath(presentationId: string): string {
+  return `/presentations/${presentationId}/sections`;
+}
+
+/**
+ * Kam se po akci vrátit. Když formulář pošle bezpečný `return_to` (vizuální
+ * edit-mode `/presentations/<uuid>/design`), vrať se TAM; jinak na seznam sekcí.
+ * `return_to` je tvrdě validovaný (jen interní design cesta) → žádný open-redirect.
+ * Stávající formuláře na stránce Sekce `return_to` NEposílají → chovají se přesně
+ * jako dřív (návrat na seznam sekcí).
+ */
+function returnBase(formData: FormData, presentationId: string): string {
+  const rt = formData.get("return_to");
+  return isSafeDesignReturnTo(rt) ? rt : sectionsPath(presentationId);
+}
+
+function backTo(base: string, errorCode?: SectionsErrorCode): never {
+  redirect(`${base}${errorCode ? `?error=${errorCode}` : ""}`);
+}
+
 function backToSections(presentationId: string, errorCode?: SectionsErrorCode): never {
-  redirect(
-    `/presentations/${presentationId}/sections${errorCode ? `?error=${errorCode}` : ""}`,
-  );
+  backTo(sectionsPath(presentationId), errorCode);
 }
 
 function targetId(formData: FormData): string | null {
@@ -47,11 +66,11 @@ function targetId(formData: FormData): string | null {
 /** Nedorovnaná databáze (chybí funkce/tabulka sekcí) → hlasitě, ne potichu. */
 function bailOnMissingSchema(
   error: { code?: string | null; message?: string | null } | null,
-  presentationId: string | null,
+  base: string | null,
 ): void {
   if (!error || !isMissingSchemaError(error)) return;
   console.error("[sections] databáze není dorovnaná:", error.message);
-  if (presentationId) backToSections(presentationId, "schema");
+  if (base) backTo(base, "schema");
   redirect("/presentations");
 }
 
@@ -71,8 +90,9 @@ export async function addSection(formData: FormData) {
   const presentationId = targetId(formData);
   const kind = String(formData.get("kind") ?? "");
   if (!presentationId) redirect("/presentations");
+  const base = returnBase(formData, presentationId);
   if (!isSectionKind(kind) || !isReadyKind(kind)) {
-    backToSections(presentationId, "kind");
+    backTo(base, "kind");
   }
 
   const { error } = await supabase.rpc("add_presentation_section", {
@@ -82,18 +102,18 @@ export async function addSection(formData: FormData) {
 
   if (error) {
     console.error("[sections] přidání sekce selhalo:", error.message);
-    bailOnMissingSchema(error, presentationId);
+    bailOnMissingSchema(error, base);
     if (error.message.includes("SECTION_SINGLETON")) {
-      backToSections(presentationId, "singleton");
+      backTo(base, "singleton");
     }
     if (error.message.includes("SECTION_KIND_NOT_ALLOWED")) {
-      backToSections(presentationId, "kind");
+      backTo(base, "kind");
     }
-    backToSections(presentationId, "add-failed");
+    backTo(base, "add-failed");
   }
 
-  revalidatePath(`/presentations/${presentationId}/sections`);
-  backToSections(presentationId);
+  revalidatePath(base);
+  backTo(base);
 }
 
 /** Posune sekci v pořadí nahoru/dolů. */
@@ -104,8 +124,9 @@ export async function moveSection(formData: FormData) {
   const sectionId = String(formData.get("section_id") ?? "");
   const direction = String(formData.get("direction") ?? "");
   if (!presentationId) redirect("/presentations");
+  const base = returnBase(formData, presentationId);
   if (!isUuid(sectionId) || (direction !== "up" && direction !== "down")) {
-    backToSections(presentationId, "move-failed");
+    backTo(base, "move-failed");
   }
 
   const { error } = await supabase.rpc("move_presentation_section", {
@@ -115,12 +136,12 @@ export async function moveSection(formData: FormData) {
 
   if (error) {
     console.error("[sections] změna pořadí selhala:", error.message);
-    bailOnMissingSchema(error, presentationId);
-    backToSections(presentationId, "move-failed");
+    bailOnMissingSchema(error, base);
+    backTo(base, "move-failed");
   }
 
-  revalidatePath(`/presentations/${presentationId}/sections`);
-  backToSections(presentationId);
+  revalidatePath(base);
+  backTo(base);
 }
 
 /** Zapne/vypne sekci. */
@@ -131,7 +152,8 @@ export async function toggleSection(formData: FormData) {
   const sectionId = String(formData.get("section_id") ?? "");
   const enabled = String(formData.get("enabled") ?? "") === "true";
   if (!presentationId) redirect("/presentations");
-  if (!isUuid(sectionId)) backToSections(presentationId, "toggle-failed");
+  const base = returnBase(formData, presentationId);
+  if (!isUuid(sectionId)) backTo(base, "toggle-failed");
 
   const { error } = await supabase.rpc("set_presentation_section_enabled", {
     p_section_id: sectionId,
@@ -140,12 +162,12 @@ export async function toggleSection(formData: FormData) {
 
   if (error) {
     console.error("[sections] přepnutí sekce selhalo:", error.message);
-    bailOnMissingSchema(error, presentationId);
-    backToSections(presentationId, "toggle-failed");
+    bailOnMissingSchema(error, base);
+    backTo(base, "toggle-failed");
   }
 
-  revalidatePath(`/presentations/${presentationId}/sections`);
-  backToSections(presentationId);
+  revalidatePath(base);
+  backTo(base);
 }
 
 /** Smaže sekci (obsah v JSONB jde s ní; navázané tabulky mají cascade). */
@@ -155,7 +177,8 @@ export async function deleteSection(formData: FormData) {
   const presentationId = targetId(formData);
   const sectionId = String(formData.get("section_id") ?? "");
   if (!presentationId) redirect("/presentations");
-  if (!isUuid(sectionId)) backToSections(presentationId, "delete-failed");
+  const base = returnBase(formData, presentationId);
+  if (!isUuid(sectionId)) backTo(base, "delete-failed");
 
   const { error } = await supabase.rpc("delete_presentation_section", {
     p_section_id: sectionId,
@@ -163,12 +186,12 @@ export async function deleteSection(formData: FormData) {
 
   if (error) {
     console.error("[sections] smazání sekce selhalo:", error.message);
-    bailOnMissingSchema(error, presentationId);
-    backToSections(presentationId, "delete-failed");
+    bailOnMissingSchema(error, base);
+    backTo(base, "delete-failed");
   }
 
-  revalidatePath(`/presentations/${presentationId}/sections`);
-  backToSections(presentationId);
+  revalidatePath(base);
+  backTo(base);
 }
 
 /**
@@ -198,7 +221,7 @@ export async function seedOtinska(formData: FormData) {
     .maybeSingle();
   if (loadError) {
     console.error("[sections] seed: načtení prezentace selhalo:", loadError.message);
-    bailOnMissingSchema(loadError, presentationId);
+    bailOnMissingSchema(loadError, sectionsPath(presentationId));
     backToSections(presentationId, "seed-failed");
   }
   if (!pres || !ownsPresentation(pres.owner_id, user.id)) {
@@ -213,7 +236,7 @@ export async function seedOtinska(formData: FormData) {
     .limit(1);
   if (countError) {
     console.error("[sections] seed: kontrola sekcí selhala:", countError.message);
-    bailOnMissingSchema(countError, presentationId);
+    bailOnMissingSchema(countError, sectionsPath(presentationId));
     backToSections(presentationId, "seed-failed");
   }
   if (!isSeedAllowed(existing?.length ?? 0)) {
@@ -227,7 +250,7 @@ export async function seedOtinska(formData: FormData) {
     .eq("id", presentationId);
   if (fieldsError) {
     console.error("[sections] seed: uložení údajů prezentace selhalo:", fieldsError.message);
-    bailOnMissingSchema(fieldsError, presentationId);
+    bailOnMissingSchema(fieldsError, sectionsPath(presentationId));
     backToSections(presentationId, "seed-failed");
   }
 
@@ -242,7 +265,7 @@ export async function seedOtinska(formData: FormData) {
   const { error: insertError } = await supabase.from("presentation_sections").insert(rows);
   if (insertError) {
     console.error("[sections] seed: vložení sekcí selhalo:", insertError.message);
-    bailOnMissingSchema(insertError, presentationId);
+    bailOnMissingSchema(insertError, sectionsPath(presentationId));
     backToSections(presentationId, "seed-failed");
   }
 

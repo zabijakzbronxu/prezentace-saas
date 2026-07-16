@@ -7,6 +7,7 @@
 
 import { useState } from "react";
 import { computeInvestment } from "@/lib/presentations/sections";
+import { CompassRose } from "./compass";
 
 const INK = "#1c1917";
 const MUTED = "#646463";
@@ -85,8 +86,11 @@ export function MapTabs({ maps }: { maps: MapView[] }) {
 }
 
 // ---- půdorysy -------------------------------------------------------
-export type RoomView = { name: string; area?: string; description?: string; url?: string };
-export type FloorView = { label: string; url?: string; rooms: RoomView[] };
+// x/y = pozice špendlíku místnosti v % plánu (0–100); compass = natočení severu.
+// Zpětná kompatibilita: místnost bez x/y se ukáže jen v seznamu (jako dřív), patro
+// bez compass nemá růžici. Když nemá špendlík nikdo, vypadá sekce jako původní seznam.
+export type RoomView = { name: string; area?: string; description?: string; url?: string; x?: number; y?: number };
+export type FloorView = { label: string; url?: string; compass?: number; rooms: RoomView[] };
 
 export function FloorplansView({ floors }: { floors: FloorView[] }) {
   const [active, setActive] = useState(0);
@@ -94,23 +98,75 @@ export function FloorplansView({ floors }: { floors: FloorView[] }) {
   const floor = floors[active] ?? floors[0];
   if (!floor) return null;
 
+  const hasImage = Boolean(floor.url);
+  // Špendlík dostanou jen místnosti s pozicí (a jen když je nahraný plán).
+  let pinCount = 0;
+  const numbered = floor.rooms.map((r) => {
+    const isPin = hasImage && typeof r.x === "number" && typeof r.y === "number";
+    return { r, isPin, no: isPin ? ++pinCount : 0 };
+  });
+  const pins = numbered.filter((n) => n.isPin);
+
   return (
     <div>
       <Tabs labels={floors.map((f) => f.label)} active={active} onSelect={(i) => { setActive(i); setRoom(null); }} />
 
       <div style={{ display: "grid", gap: "1.2rem", gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))" }}>
         {floor.url ? (
-          <div style={{ borderRadius: "12px", overflow: "hidden", border: `1px solid ${BORDER}`, background: PAPER_ALT }}>
+          <div style={{ position: "relative", borderRadius: "12px", overflow: "hidden", border: `1px solid ${BORDER}`, background: PAPER_ALT }}>
             {/* eslint-disable-next-line @next/next/no-img-element -- podepsané URL jsou dočasné */}
             <img src={floor.url} alt={`Půdorys — ${floor.label}`} style={{ width: "100%", display: "block" }} />
+            {pins.map(({ r, no }, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setRoom(r)}
+                aria-label={r.name || `Místnost ${no}`}
+                title={r.name || `Místnost ${no}`}
+                style={{
+                  position: "absolute",
+                  left: `${r.x}%`,
+                  top: `${r.y}%`,
+                  transform: "translate(-50%, -50%)",
+                  width: "28px",
+                  height: "28px",
+                  borderRadius: "999px",
+                  border: "2px solid #fff",
+                  background: "#d64545",
+                  color: "#fff",
+                  fontSize: "0.85rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  boxShadow: "0 1px 5px rgba(0,0,0,0.45)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {no}
+              </button>
+            ))}
+            {typeof floor.compass === "number" ? (
+              <div
+                style={{ position: "absolute", top: "0.6rem", right: "0.6rem" }}
+                title={`Sever natočen o ${Math.round(floor.compass)}°`}
+              >
+                <CompassRose deg={floor.compass} size={64} />
+              </div>
+            ) : null}
           </div>
         ) : null}
 
-        {floor.rooms.length > 0 ? (
+        {numbered.length > 0 ? (
           <div>
             <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: INK, marginBottom: "0.6rem" }}>Místnosti</h3>
+            {pins.length > 0 ? (
+              <p style={{ color: MUTED, fontSize: "0.85rem", marginBottom: "0.6rem" }}>
+                Klikněte na špendlík v plánu nebo na místnost v seznamu — otevře se fotka a popis.
+              </p>
+            ) : null}
             <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-              {floor.rooms.map((r, i) => {
+              {numbered.map(({ r, no, isPin }, i) => {
                 const clickable = Boolean(r.url || r.description);
                 return (
                   <li key={i}>
@@ -122,6 +178,7 @@ export function FloorplansView({ floors }: { floors: FloorView[] }) {
                         textAlign: "left",
                         display: "flex",
                         justifyContent: "space-between",
+                        alignItems: "center",
                         gap: "0.75rem",
                         background: "#fff",
                         border: `1px solid ${BORDER}`,
@@ -130,8 +187,15 @@ export function FloorplansView({ floors }: { floors: FloorView[] }) {
                         cursor: clickable ? "pointer" : "default",
                       }}
                     >
-                      <span style={{ fontWeight: 600, color: INK }}>{r.name}</span>
-                      <span style={{ color: MUTED, fontSize: "0.85rem" }}>
+                      <span style={{ display: "flex", alignItems: "center", gap: "0.5rem", minWidth: 0 }}>
+                        {isPin ? (
+                          <span style={{ flexShrink: 0, width: "1.4rem", height: "1.4rem", borderRadius: "999px", background: "#d64545", color: "#fff", fontSize: "0.75rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            {no}
+                          </span>
+                        ) : null}
+                        <span style={{ fontWeight: 600, color: INK }}>{r.name}</span>
+                      </span>
+                      <span style={{ color: MUTED, fontSize: "0.85rem", whiteSpace: "nowrap" }}>
                         {r.area}
                         {clickable ? "  ›" : ""}
                       </span>

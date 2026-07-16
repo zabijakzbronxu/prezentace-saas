@@ -2,6 +2,63 @@
 
 (Primární evidence bude v ClickUpu po připojení konektoru; tohle je pracovní plán aktuální fáze.)
 
+## Session 2026-07-15 (7) — vizuální edit-mode „na stránce" (design mode)
+
+**Proč:** Karel chtěl editovat prezentaci rovnou na té vizuální stránce (přesouvat sekce,
+otevírat jejich editor, psát popisky k fotkám), ne v odděleném seznamu `/sections`.
+Plán: `tasks/design-mode-plan.md`. Rozsah tohoto běhu = inline edit-shell (přepínač
+Náhled↔Úpravy, u sekce ↑/↓ · zap/vyp · Upravit · Odebrat, „+ Přidat sekci", inline
+popisky fotek). **Půdorysy schválně NEpřestavuju** — „Upravit" u nich jen otevře stávající
+editor (obecné napojení, ať jde vnitřek vyměnit v samostatném běhu po mně).
+
+Rozhodnutí architektury (nízké riziko):
+- Render sekcí VYTAŽEN z `listing/[slug]/page.tsx` do sdíleného `listing/[slug]/render.tsx`
+  (`createSectionRenderer`) → veřejná stránka i edit-mode kreslí TÝMŽ kódem (vzhled 1:1,
+  žádná duplicitní logika). Veřejná `page.tsx` jen volá renderer; render je čistě
+  prezentační (žádné edit prvky → anonym je nikdy nevidí, hlídá i test).
+- Řazení/zapnutí/přidání/smazání jede přes UŽ EXISTUJÍCÍ akce sekcí — přidán jen volitelný
+  `return_to` (zpět na edit-mode), tvrdě validovaný (`isSafeDesignReturnTo`, jen interní
+  `/presentations/<uuid>/design`) → žádný open-redirect. Formuláře bez `return_to` se chovají
+  jako dřív (návrat na /sections).
+- Edit-mode `/presentations/[id]/design` jen pro přihlášeného VLASTNÍKA (explicitní
+  `owner_id == user.id`, published je veřejně čitelná → sám SELECT nestačí).
+- Popisky fotek inline: nová malá akce `savePhotoCaption` (jen sloupec `caption`, ownership),
+  `useActionState` → chyba na místě, hodnota zůstane. Žádná migrace (persistence přes
+  existující akce/sloupce) → `APLIKUJ_VSE.sql` nesahám.
+
+Postaveno (NESPUŠTĚNO — ověří Karel):
+- [x] `listing/[slug]/render.tsx` (sdílený render) + `page.tsx` na něj přepojen (veřejný výstup 1:1)
+- [x] `presentations/[id]/design/` — `page.tsx` (edit + náhled), `section-frame.tsx` (lišta),
+      `inline-captions.tsx` (popisky), `actions.ts` (`savePhotoCaption`)
+- [x] `lib/presentations/design.ts` — čisté helpery (`isSafeDesignReturnTo`, `canMoveSection`, `designPath`)
+- [x] `sections/actions.ts` — volitelný `return_to` (zpětně kompatibilní)
+- [x] Vstupní body: odkaz „🎨 Vizuální úpravy" v kroku Sekce; „← Zpět na vizuální úpravy" v editoru sekce (`?from=design`)
+- [x] Testy `lib/__tests__/design.test.ts` (return_to, řazení, strukturální pojistka „veřejný render nemá edit prvky")
+- [x] Křížová revize čerstvým podagentem → **žádný blokátor** (viz Review)
+
+### Review — Session 2026-07-15 (7)
+
+**Stav: HOTOVÉ-NEOVĚŘENÉ.** Sandbox mimo (no space) → `npm test`, `typecheck`, `lint`
+ani `build` NEBĚŽELY. Nic si neodškrtávám jako zelené — spustí Karel (příkazy v shrnutí chatu).
+
+Křížová revize (čerstvý podagent, čistý kontext, čtením kódu): **žádný blokátor.** Ověřeno:
+extrakce renderu 1:1 (všech 10 polí kontextu předáno správně, `bandIndex` sekvenční),
+žádné nepoužité importy, žádné české uvozovky uvnitř `"…"`, `content` zápis se netýká
+(popisek je sloupec), edit-mode tvrdě omezený na vlastníka, `savePhotoCaption` ověřuje
+UUID i vlastnictví, `return_to` odolný proti open-redirectu, importní cesty i TS typy sedí.
+Po revizi doplněno: hlasitá `QueryErrorScreen` u skutečné chyby načtení na `/design` (lesson M3).
+
+Drobnosti na druhé kolo (neblokující): drag&drop místo šipek; plně inline WYSIWYG texty
+(teď „Upravit" otevře editor); po uložení sekce donést `?from=design` zpátky; přestavba
+půdorysů (samostatný běh). Střídání pruhů v EDIT-modu se u galerie neposune (kosmetika
+jen v editoru, veřejná stránka bez dopadu).
+
+**Riziko:** nízké/střední — jediný citlivý bod je přepojení veřejné `page.tsx` na sdílený
+render; výstup ale zůstává 1:1 (mechanický přesun, ověřeno revizí). **Rollback:** `git revert <hash>`
+(žádná migrace, z DB se nic nemaže). **Ověřovací cesta:** viz shrnutí v chatu.
+
+- [ ] **Karel — ověřit + commit** (příkazy v shrnutí chatu)
+
 ## Session 2026-07-15 (6) — tlačítko „Naplnit ukázkovým obsahem Otínská"
 
 **Proč:** Karlova výtka „je to holá kostra". Po nasazení má u prázdné prezentace vidět hned

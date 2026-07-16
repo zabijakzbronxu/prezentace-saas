@@ -43,10 +43,10 @@ export default async function SectionEditorPage({
   searchParams,
 }: {
   params: Promise<{ id: string; sectionId: string }>;
-  searchParams: Promise<{ saved?: string; error?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; from?: string }>;
 }) {
   const { id, sectionId } = await params;
-  const { saved, error } = await searchParams;
+  const { saved, error, from } = await searchParams;
 
   if (!isSupabaseConfigured()) redirect("/presentations");
   if (!isUuid(id) || !isUuid(sectionId)) redirect("/presentations");
@@ -221,11 +221,15 @@ export default async function SectionEditorPage({
     defaults.floorsData = c.floors.map((f) => ({
       label: f.label,
       image_path: f.image_path ?? "",
+      compass: f.compass ?? null,
       rooms: f.rooms.map((r) => ({
         name: r.name,
         area: r.area ?? "",
         description: r.description ?? "",
         image_path: r.image_path ?? "",
+        x: r.x ?? null,
+        y: r.y ?? null,
+        polygon: r.polygon,
       })),
     }));
     for (const f of c.floors) {
@@ -339,6 +343,14 @@ export default async function SectionEditorPage({
             </Link>{" "}
             / {nazev}
           </p>
+          {from === "design" ? (
+            <Link
+              href={`/presentations/${p.id}/design`}
+              style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--accent)" }}
+            >
+              ← Zpět na vizuální úpravy
+            </Link>
+          ) : null}
           <h1 style={{ fontSize: "1.6rem", fontWeight: 700 }}>{sectionLabel(kind)}</h1>
         </div>
 

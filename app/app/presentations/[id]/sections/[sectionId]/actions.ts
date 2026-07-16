@@ -18,6 +18,9 @@ import {
   isTextSource,
   readTextContent,
   safeExternalUrl,
+  clampFloorPercent,
+  normalizeCompassDeg,
+  readRoomPolygon,
   type SectionKind,
 } from "@/lib/presentations/sections";
 
@@ -612,21 +615,31 @@ async function saveFloorplans(
       const label = strField(f.label, 80);
       const image_path = keepMediaPath(f.image_path, userId, s.presentation_id);
       if (!label && !image_path) return null;
+      // Natočení severu (0–360). undefined = kompas u patra nenastaven.
+      const compass = normalizeCompassDeg(f.compass);
       const rooms = (Array.isArray(f.rooms) ? f.rooms : [])
         .map((rr) => {
           const r = (rr ?? {}) as Record<string, unknown>;
           const name = strField(r.name, 80);
           if (!name) return null;
+          // Špendlík v % (0–100). Platí jen s oběma souřadnicemi, jinak jen v seznamu.
+          const px = clampFloorPercent(r.x);
+          const py = clampFloorPercent(r.y);
+          const hasPin = px !== undefined && py !== undefined;
+          // Varianta B (obrys) — jen se uchová, editor ji zatím nekreslí.
+          const polygon = readRoomPolygon(r.polygon);
           return {
             name,
             area: strField(r.area, 40),
             description: strField(r.description, 400),
             image_path: keepMediaPath(r.image_path, userId, s.presentation_id),
+            ...(hasPin ? { x: px, y: py } : {}),
+            ...(polygon ? { polygon } : {}),
           };
         })
         .filter((x): x is NonNullable<typeof x> => x !== null)
         .slice(0, 40);
-      return { label: label ?? "Patro", image_path, rooms };
+      return { label: label ?? "Patro", image_path, ...(compass !== undefined ? { compass } : {}), rooms };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null)
     .slice(0, 20);

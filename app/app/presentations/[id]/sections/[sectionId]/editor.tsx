@@ -66,7 +66,20 @@ export type SectionDefaults = {
   mapsItems?: { title: string; caption: string; group: string; why: string; image_path: string }[];
   panorama?: { heading: string; caption: string; image_path: string };
   // floorsData (ne „floors" — to je string u parametrů, kolidovalo by v tomto typu)
-  floorsData?: { label: string; image_path: string; rooms: { name: string; area: string; description: string; image_path: string }[] }[];
+  floorsData?: {
+    label: string;
+    image_path: string;
+    compass: number | null;
+    rooms: {
+      name: string;
+      area: string;
+      description: string;
+      image_path: string;
+      x: number | null;
+      y: number | null;
+      polygon?: { x: number; y: number }[];
+    }[];
+  }[];
   mediaUrls?: Record<string, string>;
   // video
   videoUrl?: string;

@@ -19,6 +19,9 @@ import {
   readAnalyticMapsContent,
   readPanoramaContent,
   readFloorplansContent,
+  clampFloorPercent,
+  normalizeCompassDeg,
+  readRoomPolygon,
   readVideoContent,
   readInvestmentCalcContent,
   parseVideoUrl,
@@ -506,5 +509,172 @@ describe("čtení obsahu — kolo 4 (video, kalkulačka)", () => {
     const c = readInvestmentCalcContent({ price_czk: "hodně", area_m2: null });
     expect(c.price_czk).toBeNull();
     expect(c.area_m2).toBeNull();
+  });
+});
+
+// =====================================================================
+//  KOLO 2 (upgrade) — půdorysy: kompas + klikací špendlíky
+//  Autorizaci vlastníka drží RLS + saveSection (načte sekci pod RLS podle id),
+//  což nejde ověřit vitestem bez DB — kryjí to security-check.md + existující
+//  security-hardening testy. Tady testujeme čistou logiku pozic a kompasu.
+// =====================================================================
+
+describe("normalizeCompassDeg — natočení severu 0–360", () => {
+  it("normalizuje do <0,360)", () => {
+    expect(normalizeCompassDeg(0)).toBe(0);
+    expect(normalizeCompassDeg(90)).toBe(90);
+    expect(normalizeCompassDeg(360)).toBe(0); // celá otáčka = sever
+    expect(normalizeCompassDeg(450)).toBe(90);
+    expect(normalizeCompassDeg(-90)).toBe(270);
+    expect(normalizeCompassDeg(720)).toBe(0);
+  });
+  it("přečte číslo i z řetězce", () => {
+    expect(normalizeCompassDeg("180")).toBe(180);
+    expect(normalizeCompassDeg("45.5")).toBe(45.5);
+  });
+  it("nesmysl / prázdno → undefined (žádný NaN)", () => {
+    expect(normalizeCompassDeg("abc")).toBeUndefined();
+    expect(normalizeCompassDeg("")).toBeUndefined();
+    expect(normalizeCompassDeg(null)).toBeUndefined();
+    expect(normalizeCompassDeg(undefined)).toBeUndefined();
+    expect(normalizeCompassDeg(Number.NaN)).toBeUndefined();
+    expect(normalizeCompassDeg(Number.POSITIVE_INFINITY)).toBeUndefined();
+  });
+});
+
+describe("clampFloorPercent — pozice špendlíku v % (0–100)", () => {
+  it("ponechá hodnotu v rozsahu", () => {
+    expect(clampFloorPercent(0)).toBe(0);
+    expect(clampFloorPercent(50)).toBe(50);
+    expect(clampFloorPercent(100)).toBe(100);
+    expect(clampFloorPercent(33.33)).toBe(33.33);
+  });
+  it("ořízne mimo rozsah (nikdy mimo plán)", () => {
+    expect(clampFloorPercent(-5)).toBe(0);
+    expect(clampFloorPercent(105)).toBe(100);
+    expect(clampFloorPercent(1000)).toBe(100);
+  });
+  it("přečte číslo i z řetězce", () => {
+    expect(clampFloorPercent("42.5")).toBe(42.5);
+  });
+  it("nesmysl / prázdno → undefined", () => {
+    expect(clampFloorPercent("x")).toBeUndefined();
+    expect(clampFloorPercent("")).toBeUndefined();
+    expect(clampFloorPercent(null)).toBeUndefined();
+    expect(clampFloorPercent(undefined)).toBeUndefined();
+    expect(clampFloorPercent(Number.NaN)).toBeUndefined();
+  });
+});
+
+describe("readRoomPolygon — varianta B (obrys), zatím jen model", () => {
+  it("přijme 3+ platné body v %", () => {
+    const p = readRoomPolygon([
+      { x: 10, y: 10 },
+      { x: 90, y: 10 },
+      { x: 50, y: 80 },
+    ]);
+    expect(p).toHaveLength(3);
+    expect(p?.[0]).toEqual({ x: 10, y: 10 });
+  });
+  it("méně než 3 body → undefined (nemá co obtáhnout)", () => {
+    expect(readRoomPolygon([{ x: 10, y: 10 }, { x: 20, y: 20 }])).toBeUndefined();
+  });
+  it("ořízne body mimo rozsah a zahodí nesmyslné", () => {
+    const p = readRoomPolygon([
+      { x: -10, y: 10 }, // -10 → 0
+      { x: 200, y: 50 }, // 200 → 100
+      { x: 50, y: 50 },
+      { x: "ne", y: 5 }, // zahozeno (jen 3 platné zbudou)
+    ]);
+    expect(p).toHaveLength(3);
+    expect(p?.[0]).toEqual({ x: 0, y: 10 });
+    expect(p?.[1]).toEqual({ x: 100, y: 50 });
+  });
+  it("chybný vstup → undefined", () => {
+    expect(readRoomPolygon(null)).toBeUndefined();
+    expect(readRoomPolygon("ne")).toBeUndefined();
+    expect(readRoomPolygon({})).toBeUndefined();
+  });
+});
+
+describe("readFloorplansContent — kompas + špendlíky + zpětná kompatibilita", () => {
+  it("přečte kompas patra a špendlík místnosti", () => {
+    const c = readFloorplansContent({
+      floors: [
+        {
+          label: "Přízemí",
+          image_path: "u/p/f1.jpg",
+          compass: 90,
+          rooms: [{ name: "Kuchyně", x: 25, y: 60, description: "nová" }],
+        },
+      ],
+    });
+    expect(c.floors[0].compass).toBe(90);
+    expect(c.floors[0].rooms[0].x).toBe(25);
+    expect(c.floors[0].rooms[0].y).toBe(60);
+  });
+
+  it("ZPĚTNÁ KOMPATIBILITA: stará místnost bez x/y projde a zůstane (jen v seznamu)", () => {
+    const c = readFloorplansContent({
+      floors: [
+        {
+          label: "Patro",
+          image_path: "u/p/f.jpg",
+          rooms: [{ name: "Ložnice", area: "16 m²", description: "klid" }],
+        },
+      ],
+    });
+    expect(c.floors[0].rooms).toHaveLength(1);
+    expect(c.floors[0].rooms[0].name).toBe("Ložnice");
+    expect(c.floors[0].rooms[0].x).toBeUndefined();
+    expect(c.floors[0].rooms[0].y).toBeUndefined();
+    expect(c.floors[0].compass).toBeUndefined();
+  });
+
+  it("špendlík platí jen s OBĚMA souřadnicemi (jen x → žádný špendlík)", () => {
+    const c = readFloorplansContent({
+      floors: [{ label: "P", image_path: "u/p/f.jpg", rooms: [{ name: "Hala", x: 40 }] }],
+    });
+    expect(c.floors[0].rooms[0].x).toBeUndefined();
+    expect(c.floors[0].rooms[0].y).toBeUndefined();
+  });
+
+  it("pozice mimo rozsah se ořízne do 0–100, kompas se normalizuje", () => {
+    const c = readFloorplansContent({
+      floors: [
+        {
+          label: "P",
+          image_path: "u/p/f.jpg",
+          compass: 450,
+          rooms: [{ name: "X", x: 150, y: -20 }],
+        },
+      ],
+    });
+    expect(c.floors[0].compass).toBe(90);
+    expect(c.floors[0].rooms[0].x).toBe(100);
+    expect(c.floors[0].rooms[0].y).toBe(0);
+  });
+
+  it("neplatný kompas se zahodí (undefined), patro i tak projde", () => {
+    const c = readFloorplansContent({
+      floors: [{ label: "P", image_path: "u/p/f.jpg", compass: "sever", rooms: [] }],
+    });
+    expect(c.floors).toHaveLength(1);
+    expect(c.floors[0].compass).toBeUndefined();
+  });
+
+  it("varianta B: polygon se přečte, když má 3+ bodů", () => {
+    const c = readFloorplansContent({
+      floors: [
+        {
+          label: "P",
+          image_path: "u/p/f.jpg",
+          rooms: [
+            { name: "Obývák", polygon: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 50, y: 100 }] },
+          ],
+        },
+      ],
+    });
+    expect(c.floors[0].rooms[0].polygon).toHaveLength(3);
   });
 });

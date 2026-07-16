@@ -112,7 +112,23 @@ export default async function PresentationSectionsPage({
             }}
           >
             <WizardNav presentationId={p.id} current="sections" />
-            <PreviewLink slug={p.slug} />
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+              <Link
+                href={`/presentations/${p.id}/design`}
+                style={{
+                  fontSize: "0.85rem",
+                  fontWeight: 600,
+                  color: "var(--accent)",
+                  border: "1px solid var(--accent)",
+                  borderRadius: "8px",
+                  padding: "0.35rem 0.8rem",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                🎨 Vizuální úpravy
+              </Link>
+              <PreviewLink slug={p.slug} />
+            </div>
           </div>
           <h1 style={{ fontSize: "1.7rem", fontWeight: 700 }}>
             {p.title || [p.street, p.city].filter(Boolean).join(", ") || "Prezentace"}
@@ -120,7 +136,12 @@ export default async function PresentationSectionsPage({
           <p style={{ color: "var(--muted)" }}>
             Krok 4 · Sekce. Prezentace je stavebnice — sekce si přeskládej šipkami,
             vypni nebo zapni přepínačem, nebo přidej novou. Na veřejné stránce se
-            zobrazí jen <strong>zapnuté</strong> sekce, a to v tomhle pořadí.
+            zobrazí jen <strong>zapnuté</strong> sekce, a to v tomhle pořadí. Radši
+            upravovat rovnou na vizuální stránce? Otevři{" "}
+            <Link href={`/presentations/${p.id}/design`} style={{ color: "var(--accent)" }}>
+              🎨 Vizuální úpravy
+            </Link>
+            .
           </p>
         </div>
 
