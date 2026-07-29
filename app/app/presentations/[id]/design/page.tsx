@@ -14,7 +14,7 @@ import {
   isSectionKind,
   addableKinds,
   readAnalyticMapsContent,
-  readPanoramaContent,
+  panoramaMediaPaths,
   readFloorplansContent,
   type SectionKind,
   type SectionMeta,
@@ -177,8 +177,7 @@ export default async function DesignPage({
     if (s.kind === "analyticMaps") {
       for (const it of readAnalyticMapsContent(s.content).items) if (it.image_path) mediaPaths.push(it.image_path);
     } else if (s.kind === "panorama") {
-      const ip = readPanoramaContent(s.content).image_path;
-      if (ip) mediaPaths.push(ip);
+      for (const ip of panoramaMediaPaths(s.content)) mediaPaths.push(ip);
     } else if (s.kind === "floorplans") {
       for (const f of readFloorplansContent(s.content).floors) {
         if (f.image_path) mediaPaths.push(f.image_path);
@@ -187,9 +186,11 @@ export default async function DesignPage({
     }
   }
   if (mediaPaths.length > 0) {
-    const { data: signedMedia } = await supabase.storage
+    const { data: signedMedia, error: signMediaError } = await supabase.storage
       .from(MEDIA_BUCKET)
       .createSignedUrls(mediaPaths, signedTtlSeconds);
+    // Chyba podpisu není „žádné médium" — bez logu by obrázky sekcí tiše zmizely.
+    if (signMediaError || !signedMedia) console.error("[design] podpisy médií selhaly:", signMediaError?.message);
     for (const it of signedMedia ?? []) if (it.signedUrl && it.path) signedUrls.set(it.path, it.signedUrl);
   }
 

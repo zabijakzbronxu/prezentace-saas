@@ -160,7 +160,7 @@ export const SECTION_CATALOG: readonly SectionMeta[] = [
   {
     kind: "panorama",
     label: "360° panorama",
-    description: "Nahraješ panorama fotku. Interaktivní prohlídku připravujeme.",
+    description: "Interaktivní 360° prohlídka: nahraješ kulovou (equirektangulární) fotku, návštěvník otáčí tažením. Můžeš přidat klikací body.",
     singleton: true,
     ready: true,
   },
@@ -302,7 +302,11 @@ export type ConditionContent = { heading?: string; items: ConditionItem[] };
 export type GalleryContent = { heading?: string };
 export type MapContent = { heading?: string; zoom?: number };
 export type ContactContent = { cta_text?: string };
-export type HeroContent = { show_price?: boolean };
+// Hero: přepínač ceny + (volitelně) obtažená hranice pozemku přes hero fotku.
+// `land_polygon` = body v % (0–100) jako u půdorysů; čte se stejným tolerantním
+// readerem (`readRoomPolygon`), takže platí až od 3 bodů výš (jinak undefined).
+// Zpětná kompatibilita: staré hero bez pole → `land_polygon` undefined → vypadá jako dnes.
+export type HeroContent = { show_price?: boolean; land_polygon?: RoomPolygonPoint[] };
 
 // ---- bezpečné čtení JSONB (obsah může být cokoliv) -------------------
 
@@ -413,6 +417,20 @@ export function readContactContent(content: unknown): ContactContent {
   return { cta_text: asString(c.cta_text) };
 }
 
+/**
+ * Hero obsah: přepínač ceny (výchozí true) + volitelná obtažená hranice pozemku.
+ * `land_polygon` čte stejný validátor jako obrys místnosti (`readRoomPolygon`):
+ * platí až od 3 bodů, souřadnice ořízne do 0–100, nesmysl → undefined (hero pak
+ * vypadá jako dnes). `show_price` je true, dokud není v datech výslovně `false`.
+ */
+export function readHeroContent(content: unknown): HeroContent {
+  const c = (content ?? {}) as Record<string, unknown>;
+  return {
+    show_price: c.show_price !== false,
+    land_polygon: readRoomPolygon(c.land_polygon),
+  };
+}
+
 // ---- Kolo 3: body zájmu (POI) — ručně zadaná místa v okolí ----------
 export type PoiItem = { name: string; category?: string; distance?: string; note?: string };
 export type PoiContent = { heading?: string; items: PoiItem[] };
@@ -503,14 +521,217 @@ export function readAnalyticMapsContent(content: unknown): AnalyticMapsContent {
   return { heading: asString(c.heading), items };
 }
 
-// ---- Kolo 3: 360° panorama (statický obrázek + poznámka) -----------
-export type PanoramaContent = { heading?: string; caption?: string; image_path?: string };
+// ---- Kolo 5: 360° panorama — interaktivní prohlížeč (scény + hotspoty) --
+// Model je zpětně kompatibilní: staré sekce mají jen `image_path` (statická
+// fotka, bez `scenes`). Nové mají `scenes` (equirektangulární 360° fotka na
+// scénu) a v každé scéně `hotspots` (klikací body). Statický `image_path`
+// necháváme kvůli zpětné kompatibilitě (render bez scén ho ukáže jako dřív).
+//
+// SOUŘADNICE hotspotu: yaw (zeměpisná délka, -180..180) a pitch (šířka, -90..90).
+// Umísťují se klikem do PLOCHÉ equirektangulární fotky, kde platí přesně:
+//   yaw = x% /100*360 - 180,  pitch = 90 - y% /100*180
+// (převod je čistá funkce níž — sdílí ho editor i případné auto-body z Places).
+
+/** Limity (pojistka nad reálnou potřebou; tvrdý strop médií hlídá DB). */
+export const MAX_PANORAMA_SCENES = 20;
+export const MAX_PANORAMA_HOTSPOTS = 60;
+
+export type PanoramaHotspot = {
+  id?: string;
+  /** Zeměpisná délka -180..180 (0 = přímo vpřed). */
+  yaw: number;
+  /** Zeměpisná šířka -90..90 (0 = horizont, +90 = strop). */
+  pitch: number;
+  title?: string;
+  description?: string;
+  image_path?: string;
+  /** Připraveno pro přeskok mezi scénami / auto-body z Google Places (zatím nevyužito). */
+  target_scene?: string;
+};
+
+export type PanoramaScene = {
+  id?: string;
+  title?: string;
+  image_path: string;
+  hotspots: PanoramaHotspot[];
+};
+
+export type PanoramaContent = {
+  heading?: string;
+  caption?: string;
+  /** LEGACY: statická panorama fotka (bez interaktivity). */
+  image_path?: string;
+  scenes: PanoramaScene[];
+};
+
+/** Konečné číslo z čísla i řetězce, jinak undefined. */
+function asFiniteNumber(v: unknown): number | undefined {
+  if (typeof v === "number") return Number.isFinite(v) ? v : undefined;
+  if (typeof v === "string" && v.trim()) {
+    const n = Number(v.replace(",", "."));
+    return Number.isFinite(n) ? n : undefined;
+  }
+  return undefined;
+}
+
+/** Zeměpisná délka normalizovaná do <-180,180) z čísla i řetězce; nesmysl → 0. */
+export function clampYaw(v: unknown): number {
+  const n = asFiniteNumber(v);
+  if (n === undefined) return 0;
+  const wrapped = (((n + 180) % 360) + 360) % 360 - 180; // 180 → -180, 190 → -170
+  return Math.round(wrapped * 10) / 10;
+}
+
+/** Zeměpisná šířka oříznutá do <-90,90> z čísla i řetězce; nesmysl → 0. */
+export function clampPitch(v: unknown): number {
+  const n = asFiniteNumber(v);
+  if (n === undefined) return 0;
+  return Math.round(Math.min(90, Math.max(-90, n)) * 10) / 10;
+}
+
+/** Klik do ploché equirektangulární fotky (x/y v %, 0–100) → yaw/pitch. */
+export function panoXyToYawPitch(xPct: number, yPct: number): { yaw: number; pitch: number } {
+  return {
+    yaw: clampYaw((xPct / 100) * 360 - 180),
+    pitch: clampPitch(90 - (yPct / 100) * 180),
+  };
+}
+
+/** Zpět: yaw/pitch → pozice špendlíku v ploché fotce (x/y v %, 0–100). */
+export function panoYawPitchToXy(yaw: number, pitch: number): { x: number; y: number } {
+  const x = ((clampYaw(yaw) + 180) / 360) * 100;
+  const y = ((90 - clampPitch(pitch)) / 180) * 100;
+  return {
+    x: Math.round(Math.min(100, Math.max(0, x)) * 100) / 100,
+    y: Math.round(Math.min(100, Math.max(0, y)) * 100) / 100,
+  };
+}
+
+/**
+ * Promítne hotspot (yaw/pitch) na obrazovku pro daný pohled kamery. Používá
+ * STEJNÉ matice jako WebGL shader (koule + perspektiva), takže špendlík vždy
+ * sedí na stejném místě textury jako v editoru — konzistence z principu.
+ * Vrací pozici v % a `visible` (před kamerou a v záběru).
+ */
+export function projectHotspot(
+  yaw: number,
+  pitch: number,
+  camYaw: number,
+  camPitch: number,
+  fovDeg: number,
+  aspect: number,
+): { xPct: number; yPct: number; visible: boolean } {
+  const d2r = Math.PI / 180;
+  // Směr hotspotu ve světě: dir = Ry(yaw)*Rx(pitch)*(0,0,-1).
+  const cp = Math.cos(pitch * d2r);
+  const dir = {
+    x: -Math.sin(yaw * d2r) * cp,
+    y: Math.sin(pitch * d2r),
+    z: -Math.cos(yaw * d2r) * cp,
+  };
+  // Do pohledu kamery: view = Rx(-camPitch) * Ry(-camYaw).
+  const ay = -camYaw * d2r;
+  const ax = -camPitch * d2r;
+  const cy = Math.cos(ay), sy = Math.sin(ay);
+  const vx = cy * dir.x + sy * dir.z;
+  let vy = dir.y;
+  let vz = -sy * dir.x + cy * dir.z;
+  const cx = Math.cos(ax), sx = Math.sin(ax);
+  const ry = cx * vy - sx * vz;
+  const rz = sx * vy + cx * vz;
+  vy = ry;
+  vz = rz;
+  // Perspektiva: kamera hledí do -Z, body vpředu mají vz < 0.
+  if (vz >= -1e-6) return { xPct: 50, yPct: 50, visible: false };
+  const f = 1 / Math.tan((fovDeg * d2r) / 2);
+  const ndcX = ((f / aspect) * vx) / -vz;
+  const ndcY = (f * vy) / -vz;
+  return {
+    xPct: (ndcX * 0.5 + 0.5) * 100,
+    yPct: (1 - (ndcY * 0.5 + 0.5)) * 100,
+    visible: Math.abs(ndcX) <= 1 && Math.abs(ndcY) <= 1,
+  };
+}
+
+function readPanoramaHotspot(raw: unknown): PanoramaHotspot | null {
+  const h = (raw ?? {}) as Record<string, unknown>;
+  const yaw = asFiniteNumber(h.yaw);
+  const pitch = asFiniteNumber(h.pitch);
+  if (yaw === undefined || pitch === undefined) return null; // bez pozice nemá smysl
+  return {
+    id: asString(h.id),
+    yaw: clampYaw(yaw),
+    pitch: clampPitch(pitch),
+    title: asString(h.title),
+    description: asString(h.description),
+    image_path: asString(h.image_path),
+    target_scene: asString(h.target_scene),
+  };
+}
+
+function readPanoramaScene(raw: unknown): PanoramaScene | null {
+  const s = (raw ?? {}) as Record<string, unknown>;
+  const image_path = asString(s.image_path);
+  if (!image_path) return null; // scéna bez fotky nemá co ukázat
+  const hotspots = asArray(s.hotspots)
+    .map(readPanoramaHotspot)
+    .filter((x): x is PanoramaHotspot => x !== null)
+    .slice(0, MAX_PANORAMA_HOTSPOTS);
+  return { id: asString(s.id), title: asString(s.title), image_path, hotspots };
+}
+
 export function readPanoramaContent(content: unknown): PanoramaContent {
   const c = (content ?? {}) as Record<string, unknown>;
+  const scenes = asArray(c.scenes)
+    .map(readPanoramaScene)
+    .filter((x): x is PanoramaScene => x !== null)
+    .slice(0, MAX_PANORAMA_SCENES);
   return {
     heading: asString(c.heading),
     caption: asString(c.caption),
     image_path: asString(c.image_path),
+    scenes,
+  };
+}
+
+/** Všechny cesty k obrázkům panorama sekce (scény + hotspoty + legacy) — pro podpis URL a registraci médií. */
+export function panoramaMediaPaths(content: unknown): string[] {
+  const c = readPanoramaContent(content);
+  const paths: string[] = [];
+  if (c.image_path) paths.push(c.image_path);
+  for (const sc of c.scenes) {
+    paths.push(sc.image_path);
+    for (const h of sc.hotspots) if (h.image_path) paths.push(h.image_path);
+  }
+  return paths;
+}
+
+/**
+ * Přepočet bodu z procent OBRÁZKU na procenta KONTEJNERU, když je obrázek
+ * vykreslený s `object-fit: cover` (vycentrovaný ořez): scale = max(cw/iw, ch/ih),
+ * ořezaný přesah je rozdělený symetricky. Sdílí ho overlay hranice pozemku přes
+ * hero — body se kreslí v editoru nad CELOU fotkou (v % fotky) a na veřejné
+ * stránce se tímhle převodem posadí přesně na stejné místo fotky i po ořezu.
+ * Nesmyslné rozměry (0/záporné/NaN) → null (overlay se nevykreslí, nikdy pád).
+ */
+export function coverMapPercent(
+  imgW: number,
+  imgH: number,
+  boxW: number,
+  boxH: number,
+  xPct: number,
+  yPct: number,
+): { x: number; y: number } | null {
+  if (!(imgW > 0) || !(imgH > 0) || !(boxW > 0) || !(boxH > 0)) return null;
+  if (!Number.isFinite(xPct) || !Number.isFinite(yPct)) return null;
+  const scale = Math.max(boxW / imgW, boxH / imgH);
+  const dw = imgW * scale;
+  const dh = imgH * scale;
+  const ox = (boxW - dw) / 2;
+  const oy = (boxH - dh) / 2;
+  return {
+    x: ((ox + (xPct / 100) * dw) / boxW) * 100,
+    y: ((oy + (yPct / 100) * dh) / boxH) * 100,
   };
 }
 
@@ -518,8 +739,8 @@ export function readPanoramaContent(content: unknown): PanoramaContent {
 // x/y = pozice špendlíku místnosti v PROCENTECH plánu (0–100), ať sedí při každé
 // velikosti obrázku. compass = natočení severu ve stupních (0–360). Obojí volitelné:
 // stará data bez x/y/compass se čtou dál (místnost → jen do seznamu, patro → bez
-// růžice). polygon = varianta B (obtažení obrysu) — jen se přečte a uchová, kreslicí
-// UI zatím není (viz tasks/pudorysy-varianta-B.md).
+// růžice). polygon = obrys místnosti: kreslí se v editoru („Obtáhnout obrys",
+// sdílený ImagePolygonEditor) a na veřejné stránce je z něj klikací barevné pole.
 
 /** Procento pozice 0–100 z čísla i řetězce; mimo rozsah ořízne, nesmysl → undefined. */
 export function clampFloorPercent(v: unknown): number | undefined {
@@ -538,7 +759,7 @@ export function normalizeCompassDeg(v: unknown): number | undefined {
 }
 
 export type RoomPolygonPoint = { x: number; y: number };
-/** Varianta B: obrys místnosti jako body v %. Platný jen se 3+ body, jinak undefined. */
+/** Obrys (místnost/pozemek) jako body v %. Platný jen se 3+ body, jinak undefined. */
 export function readRoomPolygon(v: unknown): RoomPolygonPoint[] | undefined {
   if (!Array.isArray(v)) return undefined;
   const pts = v
@@ -561,7 +782,7 @@ export type FloorRoom = {
   /** Pozice špendlíku na plánu v % (0–100). Platí jen když je vyplněné OBOJÍ (jinak jen v seznamu). */
   x?: number;
   y?: number;
-  /** Varianta B — obrys místnosti (zatím se nekreslí). */
+  /** Obrys místnosti (kreslí editor, veřejná stránka z něj dělá klikací pole). */
   polygon?: RoomPolygonPoint[];
 };
 export type FloorItem = {

@@ -11,6 +11,7 @@ import {
   isSectionKind,
   sectionLabel,
   readTextContent,
+  readHeroContent,
   readMapContent,
   readContactContent,
   readGalleryContent,
@@ -22,6 +23,8 @@ import {
   readNewsContent,
   readAnalyticMapsContent,
   readPanoramaContent,
+  panoramaMediaPaths,
+  type PanoramaScene,
   readFloorplansContent,
   readVideoContent,
   readInvestmentCalcContent,
@@ -110,8 +113,26 @@ export default async function SectionEditorPage({
   const mediaPaths: string[] = []; // cesty k obrázkům sekce → podepíšeme níž
 
   if (kind === "hero") {
+    const h = readHeroContent(content);
     defaults.subtitle = p.subtitle ?? "";
-    defaults.showPrice = content.show_price !== false;
+    defaults.showPrice = h.show_price ?? true;
+    defaults.heroPolygon = h.land_polygon ?? [];
+    // URL hlavní fotky = podklad pro obtažení hranice pozemku. Bereme fotku
+    // označenou jako hero (jinak první), a podepíšeme ji (privátní bucket).
+    const { data: heroPhoto } = await supabase
+      .from("presentation_photos")
+      .select("storage_path, is_hero, sort_order")
+      .eq("presentation_id", p.id)
+      .order("is_hero", { ascending: false })
+      .order("sort_order", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (heroPhoto?.storage_path) {
+      const { data: signed } = await supabase.storage
+        .from(PHOTOS_BUCKET)
+        .createSignedUrl(heroPhoto.storage_path, 60 * 60);
+      defaults.heroPhotoUrl = signed?.signedUrl;
+    }
   } else if (kind === "text") {
     const t = readTextContent(content);
     defaults.textHeading = t.heading ?? "";
@@ -209,12 +230,32 @@ export default async function SectionEditorPage({
     for (const it of c.items) if (it.image_path) mediaPaths.push(it.image_path);
   } else if (kind === "panorama") {
     const c = readPanoramaContent(content);
+    // Zpětná kompatibilita: stará data (jen statická fotka) se nabídnou jako Scéna 1,
+    // aby je majitel jen doplnil o body a uložením proměnil v interaktivní prohlídku.
+    const rawScenes: PanoramaScene[] =
+      c.scenes.length > 0
+        ? c.scenes
+        : c.image_path
+          ? [{ id: undefined, title: undefined, image_path: c.image_path, hotspots: [] }]
+          : [];
     defaults.panorama = {
       heading: c.heading ?? "",
       caption: c.caption ?? "",
-      image_path: c.image_path ?? "",
+      scenes: rawScenes.map((s, i) => ({
+        id: s.id ?? `scene-${i}`,
+        title: s.title ?? "",
+        image_path: s.image_path,
+        hotspots: s.hotspots.map((h, j) => ({
+          id: h.id ?? `hs-${i}-${j}`,
+          yaw: h.yaw,
+          pitch: h.pitch,
+          title: h.title ?? "",
+          description: h.description ?? "",
+          image_path: h.image_path ?? "",
+        })),
+      })),
     };
-    if (c.image_path) mediaPaths.push(c.image_path);
+    for (const path of panoramaMediaPaths(content)) mediaPaths.push(path);
   } else if (kind === "floorplans") {
     const c = readFloorplansContent(content);
     defaults.heading = c.heading ?? "";
@@ -255,9 +296,11 @@ export default async function SectionEditorPage({
   // Podepsané náhledové odkazy pro obrázky sekce (media bucket).
   if (mediaPaths.length > 0) {
     const mediaUrls: Record<string, string> = {};
-    const { data: signed } = await supabase.storage
+    const { data: signed, error: signError } = await supabase.storage
       .from(MEDIA_BUCKET)
       .createSignedUrls(mediaPaths, 60 * 60);
+    // Chyba podpisu není „žádné médium" — bez logu by náhledy v editoru tiše chyběly.
+    if (signError || !signed) console.error("[sections/edit] podpisy médií selhaly:", signError?.message);
     for (const u of signed ?? []) if (u.signedUrl && u.path) mediaUrls[u.path] = u.signedUrl;
     defaults.mediaUrls = mediaUrls;
   }

@@ -9,6 +9,7 @@ import {
   addableKinds,
   sectionLabel,
   readTextContent,
+  readHeroContent,
   readBenefitsContent,
   readValuationContent,
   readConditionContent,
@@ -18,10 +19,17 @@ import {
   readNewsContent,
   readAnalyticMapsContent,
   readPanoramaContent,
+  panoramaMediaPaths,
+  panoXyToYawPitch,
+  panoYawPitchToXy,
+  clampYaw,
+  clampPitch,
+  projectHotspot,
   readFloorplansContent,
   clampFloorPercent,
   normalizeCompassDeg,
   readRoomPolygon,
+  coverMapPercent,
   readVideoContent,
   readInvestmentCalcContent,
   parseVideoUrl,
@@ -338,6 +346,101 @@ describe("čtení obsahu — kolo 2/3", () => {
     expect(readAnalyticMapsContent({ items: "x" }).items).toEqual([]);
     expect(readFloorplansContent({ floors: "x" }).floors).toEqual([]);
     expect(readPanoramaContent(null).image_path).toBeUndefined();
+    expect(readPanoramaContent(null).scenes).toEqual([]);
+  });
+});
+
+describe("panorama 360° — scény, hotspoty a projekce", () => {
+  it("readPanoramaContent přečte scény a hotspoty, zahodí neplatné", () => {
+    const c = readPanoramaContent({
+      heading: "Prohlídka",
+      caption: "obývák",
+      scenes: [
+        {
+          id: "s1",
+          title: "Obývák",
+          image_path: "u/p/a.jpg",
+          hotspots: [
+            { id: "h1", yaw: 30, pitch: -10, title: "Krb", description: "cihlový" },
+            { title: "bez pozice" }, // chybí yaw/pitch → vypadne
+            { yaw: 500, pitch: 200 }, // mimo rozsah → ořízne se
+          ],
+        },
+        { title: "scéna bez fotky", hotspots: [] }, // bez image_path → vypadne
+      ],
+    });
+    expect(c.scenes).toHaveLength(1);
+    expect(c.scenes[0].image_path).toBe("u/p/a.jpg");
+    expect(c.scenes[0].hotspots).toHaveLength(2);
+    expect(c.scenes[0].hotspots[0].title).toBe("Krb");
+    // yaw 500 → normalizováno do <-180,180), pitch 200 → ořezáno na 90
+    expect(c.scenes[0].hotspots[1].yaw).toBeGreaterThanOrEqual(-180);
+    expect(c.scenes[0].hotspots[1].yaw).toBeLessThan(180);
+    expect(c.scenes[0].hotspots[1].pitch).toBe(90);
+  });
+
+  it("zpětná kompatibilita: stará data (jen image_path) se přečtou a mají scenes: []", () => {
+    const c = readPanoramaContent({ heading: "360", caption: "obývák", image_path: "u/p/x.jpg" });
+    expect(c.image_path).toBe("u/p/x.jpg");
+    expect(c.caption).toBe("obývák");
+    expect(c.scenes).toEqual([]);
+  });
+
+  it("panoramaMediaPaths posbírá legacy fotku + scény + fotky hotspotů", () => {
+    const paths = panoramaMediaPaths({
+      image_path: "u/p/legacy.jpg",
+      scenes: [
+        {
+          image_path: "u/p/s1.jpg",
+          hotspots: [
+            { yaw: 0, pitch: 0, image_path: "u/p/h1.jpg" },
+            { yaw: 10, pitch: 0 }, // bez fotky
+          ],
+        },
+      ],
+    });
+    expect(paths).toContain("u/p/legacy.jpg");
+    expect(paths).toContain("u/p/s1.jpg");
+    expect(paths).toContain("u/p/h1.jpg");
+    expect(paths).toHaveLength(3);
+  });
+
+  it("clampYaw normalizuje do <-180,180), clampPitch ořezává do <-90,90>", () => {
+    expect(clampYaw(0)).toBe(0);
+    expect(clampYaw(180)).toBe(-180); // 180 == -180 (stejný poledník)
+    expect(clampYaw(190)).toBe(-170);
+    expect(clampYaw(-540)).toBe(-180);
+    expect(clampYaw("nesmysl")).toBe(0);
+    expect(clampPitch(120)).toBe(90);
+    expect(clampPitch(-120)).toBe(-90);
+    expect(clampPitch(45)).toBe(45);
+  });
+
+  it("převod klik x/y% ↔ yaw/pitch je konzistentní (equirektangulární)", () => {
+    expect(panoXyToYawPitch(50, 50)).toEqual({ yaw: 0, pitch: 0 });
+    expect(panoXyToYawPitch(0, 0)).toEqual({ yaw: -180, pitch: 90 });
+    // zpětný převod vnitřního bodu vrátí (skoro) stejné x/y
+    const back = panoYawPitchToXy(-90, -45);
+    expect(back.x).toBeCloseTo(25, 5);
+    expect(back.y).toBeCloseTo(75, 5);
+    const rt = panoYawPitchToXy(panoXyToYawPitch(25, 75).yaw, panoXyToYawPitch(25, 75).pitch);
+    expect(rt.x).toBeCloseTo(25, 5);
+    expect(rt.y).toBeCloseTo(75, 5);
+  });
+
+  it("projectHotspot: bod přímo vpřed je uprostřed a viditelný; za zády neviditelný", () => {
+    const ahead = projectHotspot(0, 0, 0, 0, 75, 1);
+    expect(ahead.visible).toBe(true);
+    expect(ahead.xPct).toBeCloseTo(50, 3);
+    expect(ahead.yPct).toBeCloseTo(50, 3);
+
+    // stejný bod, ale kamera otočená o 180° → za zády
+    const behind = projectHotspot(0, 0, 180, 0, 75, 1);
+    expect(behind.visible).toBe(false);
+
+    // bod nad hlavou při pohledu na horizont → nad středem (yPct < 50), pokud je v záběru
+    const up = projectHotspot(0, 30, 0, 0, 90, 1);
+    if (up.visible) expect(up.yPct).toBeLessThan(50);
   });
 });
 
@@ -676,5 +779,98 @@ describe("readFloorplansContent — kompas + špendlíky + zpětná kompatibilit
       ],
     });
     expect(c.floors[0].rooms[0].polygon).toHaveLength(3);
+  });
+
+  it("zpětná kompatibilita: místnost jen se špendlíkem (bez polygonu) projde beze změny", () => {
+    const c = readFloorplansContent({
+      floors: [
+        {
+          label: "P",
+          image_path: "u/p/f.jpg",
+          rooms: [{ name: "Kuchyně", x: 30, y: 40 }],
+        },
+      ],
+    });
+    const room = c.floors[0].rooms[0];
+    expect(room.x).toBe(30);
+    expect(room.y).toBe(40);
+    expect(room.polygon).toBeUndefined();
+  });
+});
+
+describe("readHeroContent — cena + obtažená hranice pozemku", () => {
+  it("výchozí: bez dat je cena zapnutá a hranice pozemku není", () => {
+    const h = readHeroContent({});
+    expect(h.show_price).toBe(true);
+    expect(h.land_polygon).toBeUndefined();
+  });
+
+  it("show_price se vypne jen výslovným false (jinak zůstane true)", () => {
+    expect(readHeroContent({ show_price: false }).show_price).toBe(false);
+    expect(readHeroContent({ show_price: true }).show_price).toBe(true);
+    // nesmyslná hodnota → bereme jako „nevypnuto" (true)
+    expect(readHeroContent({ show_price: "ne" }).show_price).toBe(true);
+  });
+
+  it("land_polygon se přečte od 3 bodů výš a souřadnice ořízne do 0–100", () => {
+    const h = readHeroContent({
+      land_polygon: [
+        { x: -10, y: 0 },
+        { x: 150, y: 50 },
+        { x: 50, y: 120 },
+      ],
+    });
+    expect(h.land_polygon).toHaveLength(3);
+    expect(h.land_polygon![0]).toEqual({ x: 0, y: 0 }); // -10 → 0
+    expect(h.land_polygon![1].x).toBe(100); // 150 → 100
+    expect(h.land_polygon![2].y).toBe(100); // 120 → 100
+  });
+
+  it("méně než 3 body = žádná hranice (hero vypadá jako dnes)", () => {
+    expect(readHeroContent({ land_polygon: [{ x: 10, y: 10 }, { x: 20, y: 20 }] }).land_polygon).toBeUndefined();
+    expect(readHeroContent({ land_polygon: "nesmysl" }).land_polygon).toBeUndefined();
+    expect(readHeroContent({ land_polygon: null }).land_polygon).toBeUndefined();
+  });
+
+  it("zpětná kompatibilita: staré hero jen s show_price nemá land_polygon", () => {
+    const h = readHeroContent({ show_price: false });
+    expect(h.show_price).toBe(false);
+    expect(h.land_polygon).toBeUndefined();
+  });
+});
+
+describe("coverMapPercent — přepočet bodů na object-fit: cover ořez", () => {
+  it("stejný poměr stran fotky a kontejneru = identita (žádný ořez)", () => {
+    expect(coverMapPercent(1000, 500, 200, 100, 30, 70)).toEqual({ x: 30, y: 70 });
+    expect(coverMapPercent(4000, 3000, 400, 300, 0, 100)).toEqual({ x: 0, y: 100 });
+  });
+
+  it("střed fotky je vždy střed kontejneru (cover centruje)", () => {
+    expect(coverMapPercent(4000, 3000, 1600, 736, 50, 50)).toEqual({ x: 50, y: 50 });
+    expect(coverMapPercent(1000, 2000, 300, 100, 50, 50)).toEqual({ x: 50, y: 50 });
+  });
+
+  it("širší kontejner než fotka → svislý ořez: horní část fotky je nad rámem", () => {
+    // Fotka 1:1 do rámu 2:1 → scale podle šířky, ořízne se 25 % nahoře i dole.
+    const top = coverMapPercent(1000, 1000, 200, 100, 0, 0)!;
+    expect(top.x).toBe(0);
+    expect(top.y).toBe(-50); // horní okraj fotky leží NAD kontejnerem (oříznut)
+    expect(coverMapPercent(1000, 1000, 200, 100, 50, 25)).toEqual({ x: 50, y: 0 });
+    expect(coverMapPercent(1000, 1000, 200, 100, 50, 75)).toEqual({ x: 50, y: 100 });
+  });
+
+  it("vyšší kontejner než fotka → vodorovný ořez zleva i zprava", () => {
+    // Fotka 2:1 do rámu 1:1 → scale podle výšky, ořízne se 25 % vlevo i vpravo.
+    expect(coverMapPercent(1000, 500, 100, 100, 25, 0)).toEqual({ x: 0, y: 0 });
+    expect(coverMapPercent(1000, 500, 100, 100, 75, 100)).toEqual({ x: 100, y: 100 });
+    expect(coverMapPercent(1000, 500, 100, 100, 0, 50)!.x).toBe(-50);
+  });
+
+  it("nesmyslné rozměry → null (žádný pád, overlay se nevykreslí)", () => {
+    expect(coverMapPercent(0, 1000, 100, 100, 50, 50)).toBeNull();
+    expect(coverMapPercent(1000, 1000, 0, 100, 50, 50)).toBeNull();
+    expect(coverMapPercent(-100, 1000, 100, 100, 50, 50)).toBeNull();
+    expect(coverMapPercent(NaN, 1000, 100, 100, 50, 50)).toBeNull();
+    expect(coverMapPercent(1000, 1000, 100, 100, NaN, 50)).toBeNull();
   });
 });

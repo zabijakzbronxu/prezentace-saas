@@ -21,6 +21,10 @@ import {
   clampFloorPercent,
   normalizeCompassDeg,
   readRoomPolygon,
+  clampYaw,
+  clampPitch,
+  MAX_PANORAMA_SCENES,
+  MAX_PANORAMA_HOTSPOTS,
   type SectionKind,
 } from "@/lib/presentations/sections";
 
@@ -196,6 +200,10 @@ async function saveHero(
 ): Promise<ApplyResult> {
   const subtitle = clamp(text(formData, "subtitle"), 300);
   const showPrice = formData.get("show_price") === "on";
+  // Obtažená hranice pozemku přes hero fotku (varianta polygonu). Stejný validátor
+  // jako obrys místnosti: platí až od 3 bodů, souřadnice ořízne do 0–100, nesmysl
+  // zahodí. Bez nakresleného obrysu se do obsahu nic nepíše (hero zůstane jako dnes).
+  const landPolygon = readRoomPolygon(parseJsonArray(formData, "land_polygon_json"));
 
   const { error } = await supabase
     .from("presentations")
@@ -206,7 +214,10 @@ async function saveHero(
     if (isMissingSchemaError(error)) return { ok: false, message: SCHEMA_ERROR };
     return { ok: false, message: "Uložení se nepovedlo, zkus to prosím znovu." };
   }
-  return writeContent(supabase, s.id, { show_price: showPrice });
+  return writeContent(supabase, s.id, {
+    show_price: showPrice,
+    ...(landPolygon ? { land_polygon: landPolygon } : {}),
+  });
 }
 
 // ---- text -----------------------------------------------------------
@@ -580,7 +591,7 @@ async function saveAnalyticMaps(
   return writeContent(supabase, s.id, { heading: heading ?? undefined, items });
 }
 
-// ---- panorama (jeden obrázek + poznámka) ----------------------------
+// ---- panorama (interaktivní scény + klikací hotspoty) ---------------
 async function savePanorama(
   supabase: Awaited<ReturnType<typeof createClient>>,
   s: LoadedSection,
@@ -589,15 +600,47 @@ async function savePanorama(
 ): Promise<ApplyResult> {
   const heading = clamp(text(formData, "heading"), 200);
   const caption = clamp(text(formData, "caption"), 300);
-  const image_path = keepMediaPath(formData.get("image_path"), userId, s.presentation_id);
 
-  const sync = await syncMedia(supabase, s.presentation_id, s.id, image_path ? [image_path] : []);
+  const scenes = parseJsonArray(formData, "scenes_json")
+    .map((raw) => {
+      const sc = (raw ?? {}) as Record<string, unknown>;
+      const image_path = keepMediaPath(sc.image_path, userId, s.presentation_id);
+      if (!image_path) return null; // scéna bez platné 360° fotky vypadne
+      const hotspots = (Array.isArray(sc.hotspots) ? sc.hotspots : [])
+        .map((rr) => {
+          const h = (rr ?? {}) as Record<string, unknown>;
+          const yaw = numField(h.yaw);
+          const pitch = numField(h.pitch);
+          if (yaw === null || pitch === null) return null; // bez pozice nemá bod smysl
+          return {
+            id: strField(h.id, 40),
+            yaw: clampYaw(yaw),
+            pitch: clampPitch(pitch),
+            title: strField(h.title, 120),
+            description: strField(h.description, 600),
+            image_path: keepMediaPath(h.image_path, userId, s.presentation_id),
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null)
+        .slice(0, MAX_PANORAMA_HOTSPOTS);
+      return { id: strField(sc.id, 40), title: strField(sc.title, 80), image_path, hotspots };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+    .slice(0, MAX_PANORAMA_SCENES);
+
+  // Všechny obrázky (scény + hotspoty) zaregistruj do médií (na tom stojí veřejné čtení).
+  const paths: string[] = [];
+  for (const sc of scenes) {
+    paths.push(sc.image_path);
+    for (const h of sc.hotspots) if (h.image_path) paths.push(h.image_path);
+  }
+  const sync = await syncMedia(supabase, s.presentation_id, s.id, paths);
   if (!sync.ok) return sync;
 
   return writeContent(supabase, s.id, {
     heading: heading ?? undefined,
     caption: caption ?? undefined,
-    image_path,
+    scenes,
   });
 }
 
@@ -626,7 +669,7 @@ async function saveFloorplans(
           const px = clampFloorPercent(r.x);
           const py = clampFloorPercent(r.y);
           const hasPin = px !== undefined && py !== undefined;
-          // Varianta B (obrys) — jen se uchová, editor ji zatím nekreslí.
+          // Obrys místnosti (kreslí ho editor „Obtáhnout obrys"); validní od 3 bodů.
           const polygon = readRoomPolygon(r.polygon);
           return {
             name,

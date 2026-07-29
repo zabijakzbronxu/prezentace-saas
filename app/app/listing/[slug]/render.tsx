@@ -13,6 +13,7 @@ import { formatPrice, formatArea } from "@/lib/format";
 import { formatFileSize } from "@/lib/documents";
 import {
   isReadyKind,
+  readHeroContent,
   readTextContent,
   readMapContent,
   readContactContent,
@@ -39,6 +40,8 @@ import {
 } from "@/lib/presentations/sections";
 import { Gallery, type GalleryImage } from "./gallery";
 import { MapTabs, FloorplansView, InvestmentCalcView } from "./listing-sections";
+import { PanoramaViewer } from "./panorama-viewer";
+import { LandPolygonOverlay } from "./land-polygon-overlay";
 
 // Světlá prezentační paleta (Playfair + Work Sans). Sdílená s page.tsx.
 export const INK = "#1c1917";
@@ -212,7 +215,9 @@ export function createSectionRenderer(
   }
 
   function renderHero(content: unknown): React.ReactNode {
-    const showPrice = (content as { show_price?: boolean })?.show_price !== false;
+    const hero = readHeroContent(content);
+    const showPrice = hero.show_price !== false;
+    const landPolygon = hero.land_polygon;
     const kicker = [p.disposition, p.property_type, p.city].filter(Boolean).join("  ·  ");
 
     if (heroUrl) {
@@ -220,7 +225,15 @@ export function createSectionRenderer(
         <section style={{ position: "relative", height: "min(78vh, 46rem)", overflow: "hidden", background: PAPER_ALT }}>
           {/* eslint-disable-next-line @next/next/no-img-element -- podepsané URL jsou dočasné */}
           <img src={heroUrl} alt={displayTitle} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.15) 45%, rgba(0,0,0,0.1) 100%)" }} />
+          {/* Obtažená hranice pozemku přes fotku (jako u Otínské). Body jsou v %
+              CELÉ fotky (tak se kreslí v editoru); fotka je tu ale oříznutá přes
+              object-fit: cover, takže je přepočítává klientský overlay stejnou
+              cover-matematikou — obrys sedí na fotku na každém zařízení.
+              Bez polygonu se nevykreslí nic. */}
+          {landPolygon && landPolygon.length >= 3 ? (
+            <LandPolygonOverlay imageUrl={heroUrl} points={landPolygon} />
+          ) : null}
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.15) 45%, rgba(0,0,0,0.1) 100%)", pointerEvents: "none" }} />
           <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "clamp(1.5rem, 5vw, 3rem)", color: "#fff" }}>
             <div style={{ maxWidth: "60rem", margin: "0 auto", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
               {kicker ? <p style={{ textTransform: "uppercase", letterSpacing: "0.18em", fontSize: "0.78rem", opacity: 0.9 }}>{kicker}</p> : null}
@@ -645,7 +658,15 @@ export function createSectionRenderer(
     const shown = maps.filter((m) => m.url || m.title);
     if (shown.length === 0) {
       if (!isPreview) return null;
-      return placeholderSection(c.heading || "Analytické mapy", "Zatím žádné mapy — nahraj je v kroku Sekce.");
+      // Rozlišit „žádná data" od „data jsou, ale podpis URL selhal" — chyba
+      // podpisu se nesmí tvářit jako prázdná sekce s výzvou „nahraj".
+      const hasImages = c.items.some((it) => it.image_path);
+      return placeholderSection(
+        c.heading || "Analytické mapy",
+        hasImages
+          ? "Mapy jsou nahrané, ale nepodařilo se načíst jejich obrázky (podpis odkazů selhal). Zkus stránku obnovit; když to trvá, mrkni do logu serveru."
+          : "Zatím žádné mapy — nahraj je v kroku Sekce.",
+      );
     }
     return (
       <section style={band(bandIndex++)}>
@@ -659,10 +680,47 @@ export function createSectionRenderer(
 
   function renderPanorama(content: unknown): React.ReactNode {
     const c = readPanoramaContent(content);
+    // Nový model: interaktivní scény (equirektangulární 360° fotky + hotspoty).
+    const scenes = c.scenes
+      .map((s, i) => ({
+        id: s.id || `scene-${i}`,
+        title: s.title,
+        url: s.image_path ? signedUrls.get(s.image_path) : undefined,
+        hotspots: s.hotspots.map((h, j) => ({
+          id: h.id || `hs-${i}-${j}`,
+          yaw: h.yaw,
+          pitch: h.pitch,
+          title: h.title,
+          description: h.description,
+          url: h.image_path ? signedUrls.get(h.image_path) : undefined,
+        })),
+      }))
+      .filter((s) => Boolean(s.url));
+
+    if (scenes.length > 0) {
+      return (
+        <section style={band(bandIndex++)}>
+          <div style={inner}>
+            <h2 style={sectionTitle}>{c.heading || "Virtuální prohlídka"}</h2>
+            <PanoramaViewer scenes={scenes} caption={c.caption} />
+          </div>
+        </section>
+      );
+    }
+
+    // Zpětná kompatibilita: stará data měla jen statickou fotku (bez scén).
     const url = c.image_path ? signedUrls.get(c.image_path) : undefined;
     if (!url) {
       if (!isPreview) return null;
-      return placeholderSection(c.heading || "Panorama", "Zatím žádné panorama — nahraj ho v kroku Sekce.");
+      // Rozlišit „žádná data" od „data jsou, ale podpis URL selhal" — jinak by
+      // náhled zavádějícím „nahraj panorama" tvrdil, že sekce je prázdná.
+      const hasData = c.scenes.length > 0 || Boolean(c.image_path);
+      return placeholderSection(
+        c.heading || "Panorama",
+        hasData
+          ? "Panorama je nahrané, ale nepodařilo se načíst jeho obrázky (podpis odkazů selhal). Zkus stránku obnovit; když to trvá, mrkni do logu serveru."
+          : "Zatím žádné panorama — nahraj ho v kroku Sekce.",
+      );
     }
     return (
       <section style={band(bandIndex++)}>
@@ -672,9 +730,9 @@ export function createSectionRenderer(
             {/* eslint-disable-next-line @next/next/no-img-element -- podepsané URL jsou dočasné */}
             <img src={url} alt={c.caption || "Panorama"} style={{ width: "100%", display: "block" }} />
           </div>
-          <p style={{ color: MUTED, marginTop: "0.6rem", fontSize: "0.9rem" }}>
-            {c.caption ? `${c.caption} · ` : ""}Interaktivní 360° otáčení připravujeme.
-          </p>
+          {c.caption ? (
+            <p style={{ color: MUTED, marginTop: "0.6rem", fontSize: "0.9rem" }}>{c.caption}</p>
+          ) : null}
         </div>
       </section>
     );
@@ -693,6 +751,7 @@ export function createSectionRenderer(
         url: r.image_path ? signedUrls.get(r.image_path) : undefined,
         x: r.x,
         y: r.y,
+        polygon: r.polygon, // varianta B: obrys místnosti (klikací pole), když je nakreslený
       })),
     }));
     if (floors.length === 0) {

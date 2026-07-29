@@ -14,8 +14,10 @@ import {
   MEDIA_LIMITS_HINT,
 } from "@/lib/media";
 import { sniffImageType } from "@/lib/photos";
+import { panoXyToYawPitch, panoYawPitchToXy } from "@/lib/presentations/sections";
 import { input, label, hint, smallBtn } from "../../../ui";
 import { CompassRose } from "../../../../listing/[slug]/compass";
+import { ImagePolygonEditor, type PolygonPoint } from "./polygon-editor";
 
 // ---- sdílený nahrávač jednoho obrázku -------------------------------
 export function MediaUploader({
@@ -197,43 +199,325 @@ export function AnalyticMapsFields({
 }
 
 // =====================================================================
-//  PANORAMA — jeden obrázek + poznámka (statické zobrazení)
+//  PANORAMA — interaktivní 360° prohlídka (scény + klikací hotspoty)
+//  Workflow pro laika:
+//   (a) nahraj kulovou (equirektangulární) 360° fotku scény,
+//   (b) klikáním do ploché fotky rozmísti body (hotspoty) s názvem/popisem/fotkou.
+//  Klik do ploché equirektangulární fotky přepočítáme na yaw/pitch (čisté funkce
+//  panoXyToYawPitch/panoYawPitchToXy), takže bod sedne přesně tam i v 3D otáčení.
+//  Víc scén = víc míst/pater. Staré statické foto se nabídne jako Scéna 1.
 // =====================================================================
+type PanoHotspot = {
+  id: string;
+  yaw: number;
+  pitch: number;
+  title: string;
+  description: string;
+  image_path: string;
+};
+type PanoScene = { id: string; title: string; image_path: string; hotspots: PanoHotspot[] };
+
+// Klikací plocha nad plochou 360° fotkou: klik přidá/umístí bod, tažením se přemístí.
+// Pozice se drží jako yaw/pitch; tady se jen převádí na x/y % pro vykreslení.
+function PanoPinboard({
+  imageUrl,
+  hotspots,
+  selectedHi,
+  onPlaceClick,
+  onMovePin,
+  onSelectPin,
+}: {
+  imageUrl: string;
+  hotspots: PanoHotspot[];
+  selectedHi: number | null;
+  onPlaceClick: (x: number, y: number) => void;
+  onMovePin: (hi: number, x: number, y: number) => void;
+  onSelectPin: (hi: number) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [drag, setDrag] = useState<number | null>(null);
+  const dragMoved = useRef(false);
+
+  const pct = (clientX: number, clientY: number) => {
+    const el = ref.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+    const x = Math.min(100, Math.max(0, ((clientX - rect.left) / rect.width) * 100));
+    const y = Math.min(100, Math.max(0, ((clientY - rect.top) / rect.height) * 100));
+    return { x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100 };
+  };
+
+  return (
+    <div
+      ref={ref}
+      onPointerDown={() => {
+        dragMoved.current = false;
+      }}
+      onClick={(e) => {
+        if (dragMoved.current) {
+          dragMoved.current = false;
+          return;
+        }
+        const pos = pct(e.clientX, e.clientY);
+        if (pos) onPlaceClick(pos.x, pos.y);
+      }}
+      onPointerMove={(e) => {
+        if (drag === null) return;
+        const pos = pct(e.clientX, e.clientY);
+        if (pos) {
+          dragMoved.current = true;
+          onMovePin(drag, pos.x, pos.y);
+        }
+      }}
+      onPointerUp={() => setDrag(null)}
+      onPointerLeave={() => setDrag(null)}
+      style={{
+        position: "relative",
+        width: "100%",
+        borderRadius: "8px",
+        overflow: "hidden",
+        border: "1px solid #1e293b",
+        cursor: "crosshair",
+        touchAction: "none",
+        userSelect: "none",
+      }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element -- náhled je dočasný (podepsané URL / blob) */}
+      <img src={imageUrl} alt="360° fotka" draggable={false} style={{ width: "100%", display: "block", pointerEvents: "none" }} />
+      {hotspots.map((h, hi) => {
+        const { x, y } = panoYawPitchToXy(h.yaw, h.pitch);
+        return (
+          <button
+            key={h.id}
+            type="button"
+            title={h.title || `Bod ${hi + 1}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelectPin(hi);
+            }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              // Capture: tažení bodu se neutrhne, ani když myš vyjede z fotky.
+              e.currentTarget.setPointerCapture?.(e.pointerId);
+              dragMoved.current = false;
+              setDrag(hi);
+            }}
+            style={{
+              position: "absolute",
+              left: `${x}%`,
+              top: `${y}%`,
+              transform: "translate(-50%, -50%)",
+              width: "26px",
+              height: "26px",
+              borderRadius: "999px",
+              border: selectedHi === hi ? "2px solid #fef08a" : "2px solid rgba(255,255,255,0.85)",
+              background: "#d64545",
+              color: "#fff",
+              fontSize: "0.8rem",
+              fontWeight: 700,
+              cursor: drag === hi ? "grabbing" : "grab",
+              boxShadow: "0 1px 4px rgba(0,0,0,0.5)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              touchAction: "none",
+            }}
+          >
+            {hi + 1}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function PanoramaFields({
   presentationId,
   userId,
   heading,
   caption,
-  imagePath,
-  currentUrl,
+  initialScenes,
+  mediaUrls,
 }: {
   presentationId: string;
   userId: string;
   heading: string;
   caption: string;
-  imagePath: string;
-  currentUrl?: string;
+  initialScenes: PanoScene[];
+  mediaUrls: Record<string, string>;
 }) {
-  const [path, setPath] = useState(imagePath);
+  const [scenes, setScenes] = useState<PanoScene[]>(initialScenes);
+  const [selected, setSelected] = useState<{ si: number; hi: number } | null>(null);
+  // Dočasné náhledy nahraných fotek z blobu (klíč = storage cesta), aby šlo klikat body
+  // hned po nahrání, než přijde podepsané URL ze serveru. Neukládá se do DB.
+  const [previews, setPreviews] = useState<Record<string, string>>({});
+
+  const setScene = (si: number, key: "title" | "image_path", val: string) =>
+    setScenes((p) => p.map((s, i) => (i === si ? { ...s, [key]: val } : s)));
+  const addScene = () =>
+    setScenes((p) => [...p, { id: crypto.randomUUID(), title: "", image_path: "", hotspots: [] }]);
+  const removeScene = (si: number) => {
+    setSelected(null);
+    setScenes((p) => p.filter((_, i) => i !== si));
+  };
+  const moveScene = (si: number, d: -1 | 1) => {
+    setSelected(null);
+    setScenes((p) => {
+      const n = [...p];
+      const t = si + d;
+      if (t < 0 || t >= n.length) return p;
+      [n[si], n[t]] = [n[t], n[si]];
+      return n;
+    });
+  };
+
+  const setHotspot = (si: number, hi: number, key: "title" | "description" | "image_path", val: string) =>
+    setScenes((p) =>
+      p.map((s, i) =>
+        i === si ? { ...s, hotspots: s.hotspots.map((h, j) => (j === hi ? { ...h, [key]: val } : h)) } : s,
+      ),
+    );
+  const removeHotspot = (si: number, hi: number) => {
+    setSelected(null);
+    setScenes((p) => p.map((s, i) => (i === si ? { ...s, hotspots: s.hotspots.filter((_, j) => j !== hi) } : s)));
+  };
+  const moveHotspotPos = (si: number, hi: number, x: number, y: number) => {
+    const { yaw, pitch } = panoXyToYawPitch(x, y);
+    setScenes((p) =>
+      p.map((s, i) =>
+        i === si ? { ...s, hotspots: s.hotspots.map((h, j) => (j === hi ? { ...h, yaw, pitch } : h)) } : s,
+      ),
+    );
+  };
+
+  // Klik do 360° fotky = přidat nový bod tam, kam se kliklo.
+  const placeClick = (si: number, x: number, y: number) => {
+    const { yaw, pitch } = panoXyToYawPitch(x, y);
+    const newHi = scenes[si]?.hotspots.length ?? 0;
+    setScenes((p) =>
+      p.map((s, i) =>
+        i === si
+          ? { ...s, hotspots: [...s.hotspots, { id: crypto.randomUUID(), yaw, pitch, title: "", description: "", image_path: "" }] }
+          : s,
+      ),
+    );
+    setSelected({ si, hi: newHi });
+  };
+
   return (
     <>
-      <input type="hidden" name="image_path" value={path} />
+      <input type="hidden" name="scenes_json" value={JSON.stringify(scenes)} />
       <label style={label}>
         Nadpis sekce
         <input style={input} type="text" name="heading" maxLength={200} placeholder="např. Virtuální prohlídka" defaultValue={heading} />
       </label>
       <p style={hint}>
-        Nahraj panorama fotku (širokoúhlou / 360°). Zatím ji ukážeme jako velký obrázek —
-        <strong> interaktivní otáčení připravujeme</strong>.
+        Nahraj <strong>kulovou (equirektangulární) 360° fotku</strong> — běžný výstup z 360°
+        kamery nebo z režimu &bdquo;Panorama / Photo Sphere&ldquo; v mobilu (poměr stran 2:1).
+        Návštěvník s ní pak otáčí tažením. Do fotky můžeš <strong>klikáním</strong> přidat body
+        (hotspoty) s názvem, popisem a fotkou. Víc scén = víc místností nebo pater.
       </p>
-      <MediaUploader
-        presentationId={presentationId}
-        userId={userId}
-        currentUrl={path ? currentUrl : undefined}
-        onUploaded={setPath}
-      />
+
+      {scenes.length === 0 ? (
+        <p style={hint}>Zatím žádná scéna. Přidej první tlačítkem níže.</p>
+      ) : (
+        scenes.map((s, si) => {
+          const sceneUrl = s.image_path ? (mediaUrls[s.image_path] ?? previews[s.image_path]) : undefined;
+          return (
+            <div key={s.id} style={{ ...cardStyle, gap: "0.75rem" }}>
+              <div style={cardHeader}>
+                <strong style={{ fontSize: "0.9rem" }}>Scéna {si + 1}</strong>
+                <div style={{ display: "flex", gap: "0.35rem" }}>
+                  <button type="button" style={smallBtn} onClick={() => moveScene(si, -1)} disabled={si === 0}>↑</button>
+                  <button type="button" style={smallBtn} onClick={() => moveScene(si, 1)} disabled={si === scenes.length - 1}>↓</button>
+                  <button type="button" style={dangerBtn} onClick={() => removeScene(si)}>Odebrat scénu</button>
+                </div>
+              </div>
+              <label style={label}>
+                Název scény (nepovinné)
+                <input style={input} type="text" value={s.title} maxLength={80} placeholder="např. Obývací pokoj" onChange={(e) => setScene(si, "title", e.target.value)} />
+              </label>
+
+              <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>360° fotka scény</span>
+              <MediaUploader
+                presentationId={presentationId}
+                userId={userId}
+                currentUrl={sceneUrl}
+                onUploaded={(path, preview) => {
+                  setScene(si, "image_path", path);
+                  if (preview) setPreviews((p) => ({ ...p, [path]: preview }));
+                }}
+              />
+
+              {/* Klikací umístění bodů do ploché fotky */}
+              {sceneUrl ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                  <p style={hint}>
+                    Klikni do fotky a přidej bod. Špendlík pak přetáhni přesně tam, kam patří.
+                    (Fotka je &bdquo;rozbalená&ldquo; do plochy — návštěvník ji uvidí jako kouli.)
+                  </p>
+                  <PanoPinboard
+                    imageUrl={sceneUrl}
+                    hotspots={s.hotspots}
+                    selectedHi={selected && selected.si === si ? selected.hi : null}
+                    onPlaceClick={(x, y) => placeClick(si, x, y)}
+                    onMovePin={(hi, x, y) => moveHotspotPos(si, hi, x, y)}
+                    onSelectPin={(hi) => setSelected({ si, hi })}
+                  />
+                </div>
+              ) : (
+                <p style={hint}>Nahraj 360° fotku výše — pak do ní klikáním rozmístíš body.</p>
+              )}
+
+              {/* Seznam bodů */}
+              <div style={{ borderTop: "1px dashed #334155", paddingTop: "0.6rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>Body (hotspoty)</span>
+                {s.hotspots.length === 0 ? (
+                  <p style={hint}>Zatím žádný bod. Klikni do fotky výše.</p>
+                ) : null}
+                {s.hotspots.map((h, hi) => {
+                  const isSel = Boolean(selected && selected.si === si && selected.hi === hi);
+                  return (
+                    <div
+                      key={h.id}
+                      style={{
+                        border: isSel ? "1px solid #fde047" : "1px solid #1e293b",
+                        borderRadius: "8px",
+                        padding: "0.6rem",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "0.4rem",
+                      }}
+                    >
+                      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                        <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#fff", background: "#d64545", borderRadius: "999px", padding: "0.1rem 0.55rem", whiteSpace: "nowrap" }}>
+                          📍 {hi + 1}
+                        </span>
+                        <input style={{ ...input, flex: 1 }} type="text" value={h.title} maxLength={120} placeholder="Název bodu (např. Krb)" onChange={(e) => setHotspot(si, hi, "title", e.target.value)} onFocus={() => setSelected({ si, hi })} />
+                        <button type="button" style={dangerBtn} onClick={() => removeHotspot(si, hi)}>×</button>
+                      </div>
+                      <input style={input} type="text" value={h.description} maxLength={600} placeholder="Popis (nepovinné)" onChange={(e) => setHotspot(si, hi, "description", e.target.value)} />
+                      <MediaUploader
+                        presentationId={presentationId}
+                        userId={userId}
+                        currentUrl={h.image_path ? mediaUrls[h.image_path] : undefined}
+                        onUploaded={(path) => setHotspot(si, hi, "image_path", path)}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })
+      )}
+      <div>
+        <button type="button" style={{ ...smallBtn, padding: "0.5rem 0.9rem" }} onClick={addScene}>+ Přidat scénu</button>
+      </div>
+
       <label style={label}>
-        Popisek (nepovinné)
+        Popisek pod prohlížečem (nepovinné)
         <input style={input} type="text" name="caption" maxLength={300} placeholder="např. Pohled z obývacího pokoje" defaultValue={caption} />
       </label>
     </>
@@ -254,8 +538,8 @@ type Room = {
   image_path: string;
   x: number | null; // pozice špendlíku v % (0–100), null = jen v seznamu
   y: number | null;
-  // Varianta B (obrys): editor ji zatím nekreslí, jen ji nese beze změny,
-  // aby se při uložení neztratila (přijde-li přímým zápisem / v příštím kole).
+  // Obrys místnosti — kreslí se tlačítkem „Obtáhnout obrys" (ImagePolygonEditor),
+  // na veřejné stránce je z něj klikací barevné pole.
   polygon?: { x: number; y: number }[];
 };
 type Floor = { label: string; image_path: string; compass: number | null; rooms: Room[] };
@@ -265,6 +549,7 @@ type Floor = { label: string; image_path: string; compass: number | null; rooms:
 function PlanPinboard({
   imageUrl,
   rooms,
+  numbers,
   placingRi,
   selectedRi,
   onPlanClick,
@@ -273,6 +558,8 @@ function PlanPinboard({
 }: {
   imageUrl: string;
   rooms: Room[];
+  /** Číslo místnosti dle SPOLEČNÉHO číslování s veřejnou stránkou (obrysy + špendlíky). */
+  numbers: number[];
   placingRi: number | null;
   selectedRi: number | null;
   onPlanClick: (x: number, y: number) => void;
@@ -292,10 +579,6 @@ function PlanPinboard({
     const y = Math.min(100, Math.max(0, ((clientY - rect.top) / rect.height) * 100));
     return { x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100 };
   };
-
-  // Číslo špendlíku = pořadí umístěné místnosti (odpovídá číslu v seznamu).
-  let n = 0;
-  const pinNumber = rooms.map((r) => (r.x !== null && r.y !== null ? ++n : 0));
 
   return (
     <div
@@ -340,13 +623,15 @@ function PlanPinboard({
           <button
             key={ri}
             type="button"
-            title={r.name || `Místnost ${pinNumber[ri]}`}
+            title={r.name || `Místnost ${numbers[ri]}`}
             onClick={(e) => {
               e.stopPropagation();
               onSelectPin(ri);
             }}
             onPointerDown={(e) => {
               e.stopPropagation();
+              // Capture: tažení špendlíku se neutrhne, ani když myš vyjede z plánu.
+              e.currentTarget.setPointerCapture?.(e.pointerId);
               dragMoved.current = false;
               setDrag(ri);
             }}
@@ -371,7 +656,7 @@ function PlanPinboard({
               touchAction: "none",
             }}
           >
-            {pinNumber[ri]}
+            {numbers[ri]}
           </button>
         ) : null,
       )}
@@ -395,6 +680,10 @@ export function FloorplansFields({
   const [floors, setFloors] = useState<Floor[]>(initialFloors);
   const [placing, setPlacing] = useState<{ fi: number; ri: number } | null>(null);
   const [selected, setSelected] = useState<{ fi: number; ri: number } | null>(null);
+  // Právě obtahovaná místnost (režim „obrys"). Když je nastavená, plocha plánu se
+  // přepne ze špendlíků na kreslení polygonu té místnosti — jedna interaktivní
+  // plocha, žádné překrývání dvou nástrojů.
+  const [outlining, setOutlining] = useState<{ fi: number; ri: number } | null>(null);
   // Dočasné náhledy plánů z blobu (klíč = storage cesta), aby šlo klikat špendlíky
   // hned po nahrání, než přijde podepsané URL ze serveru. Neukládá se do DB.
   const [previews, setPreviews] = useState<Record<string, string>>({});
@@ -414,11 +703,13 @@ export function FloorplansFields({
   const removeFloor = (fi: number) => {
     setPlacing(null);
     setSelected(null);
+    setOutlining(null);
     setFloors((p) => p.filter((_, i) => i !== fi));
   };
   const moveFloor = (fi: number, d: -1 | 1) => {
     setPlacing(null);
     setSelected(null);
+    setOutlining(null);
     setFloors((p) => {
       const n = [...p];
       const t = fi + d;
@@ -445,12 +736,21 @@ export function FloorplansFields({
   const removeRoom = (fi: number, ri: number) => {
     setPlacing(null);
     setSelected(null);
+    setOutlining(null);
     setFloors((p) => p.map((f, i) => (i === fi ? { ...f, rooms: f.rooms.filter((_, j) => j !== ri) } : f)));
   };
   const setPin = (fi: number, ri: number, x: number | null, y: number | null) =>
     setFloors((p) =>
       p.map((f, i) =>
         i === fi ? { ...f, rooms: f.rooms.map((r, j) => (j === ri ? { ...r, x, y } : r)) } : f,
+      ),
+    );
+  // Uloží obrys (polygon) místnosti. Prázdné pole = obrys smazán (uložením vypadne,
+  // protože `readRoomPolygon` bere až 3+ bodů).
+  const setRoomPolygon = (fi: number, ri: number, polygon: PolygonPoint[]) =>
+    setFloors((p) =>
+      p.map((f, i) =>
+        i === fi ? { ...f, rooms: f.rooms.map((r, j) => (j === ri ? { ...r, polygon } : r)) } : f,
       ),
     );
 
@@ -492,8 +792,15 @@ export function FloorplansFields({
         floors.map((f, fi) => {
           const compassOn = f.compass !== null;
           const planUrl = f.image_path ? (mediaUrls[f.image_path] ?? previews[f.image_path]) : undefined;
+          // Index místnosti, jejíž obrys se právě obtahuje na tomhle patře (null = nikdo).
+          const outliningHere = outlining && outlining.fi === fi ? outlining.ri : null;
+          // Číslování SHODNÉ s veřejnou stránkou (FloorplansView): jedno pořadí přes
+          // všechny „umístěné" místnosti — s hotovým obrysem (3+ body) NEBO špendlíkem;
+          // obrys má přednost, místnost dostane jedno číslo.
           let pn = 0;
-          const pinNo = f.rooms.map((r) => (r.x !== null && r.y !== null ? ++pn : 0));
+          const roomNo = f.rooms.map((r) =>
+            (r.polygon?.length ?? 0) >= 3 || (r.x !== null && r.y !== null) ? ++pn : 0,
+          );
           return (
             <div key={fi} style={{ ...cardStyle, gap: "0.75rem" }}>
               <div style={cardHeader}>
@@ -558,34 +865,56 @@ export function FloorplansFields({
                 ) : null}
               </div>
 
-              {/* Plán se špendlíky */}
+              {/* Plán: buď špendlíky (výchozí), nebo obtahování obrysu jedné místnosti */}
               {planUrl ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                  <p style={hint}>
-                    {placing && placing.fi === fi
-                      ? "Klikni do plánu, kam místnost umístit."
-                      : "Klikni do plánu a přidej místnost. Špendlík pak přetáhni přesně tam, kam patří."}
-                    {placing && placing.fi === fi ? (
-                      <>
-                        {"  "}
-                        <button type="button" style={{ ...smallBtn, padding: "0.15rem 0.5rem" }} onClick={() => setPlacing(null)}>
-                          Zrušit umísťování
-                        </button>
-                      </>
-                    ) : null}
-                  </p>
-                  <PlanPinboard
-                    imageUrl={planUrl}
-                    rooms={f.rooms}
-                    placingRi={placing && placing.fi === fi ? placing.ri : null}
-                    selectedRi={selected && selected.fi === fi ? selected.ri : null}
-                    onPlanClick={(x, y) => planClick(fi, x, y)}
-                    onMovePin={(ri, x, y) => setPin(fi, ri, x, y)}
-                    onSelectPin={(ri) => setSelected({ fi, ri })}
-                  />
-                </div>
+                outliningHere !== null ? (
+                  // Režim „obrys": plocha plánu patří kreslení polygonu vybrané místnosti.
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", background: "#0f172a", border: "1px solid #334155", borderRadius: "8px", padding: "0.5rem 0.7rem" }}>
+                      <span style={{ fontSize: "0.85rem" }}>
+                        Obtahuješ obrys místnosti:{" "}
+                        <strong>{f.rooms[outliningHere]?.name || `Místnost ${outliningHere + 1}`}</strong>
+                      </span>
+                      <button type="button" style={{ ...smallBtn, marginLeft: "auto", borderColor: "#4ade80", color: "#4ade80" }} onClick={() => setOutlining(null)}>
+                        Hotovo
+                      </button>
+                    </div>
+                    <ImagePolygonEditor
+                      key={`${fi}-${outliningHere}`}
+                      imageUrl={planUrl}
+                      points={f.rooms[outliningHere]?.polygon ?? []}
+                      onChange={(pts) => setRoomPolygon(fi, outliningHere, pts)}
+                    />
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                    <p style={hint}>
+                      {placing && placing.fi === fi
+                        ? "Klikni do plánu, kam místnost umístit."
+                        : "Klikni do plánu a přidej místnost (špendlík). Nebo u místnosti níž zvol „Obtáhnout obrys“ a obtáhni její tvar."}
+                      {placing && placing.fi === fi ? (
+                        <>
+                          {"  "}
+                          <button type="button" style={{ ...smallBtn, padding: "0.15rem 0.5rem" }} onClick={() => setPlacing(null)}>
+                            Zrušit umísťování
+                          </button>
+                        </>
+                      ) : null}
+                    </p>
+                    <PlanPinboard
+                      imageUrl={planUrl}
+                      rooms={f.rooms}
+                      numbers={roomNo}
+                      placingRi={placing && placing.fi === fi ? placing.ri : null}
+                      selectedRi={selected && selected.fi === fi ? selected.ri : null}
+                      onPlanClick={(x, y) => planClick(fi, x, y)}
+                      onMovePin={(ri, x, y) => setPin(fi, ri, x, y)}
+                      onSelectPin={(ri) => setSelected({ fi, ri })}
+                    />
+                  </div>
+                )
               ) : (
-                <p style={hint}>Nahraj obrázek plánu výše — pak do něj klikáním rozmístíš místnosti.</p>
+                <p style={hint}>Nahraj obrázek plánu výše — pak do něj klikáním rozmístíš místnosti nebo obtáhneš obrysy.</p>
               )}
 
               {/* Seznam místností (i těch bez špendlíku — fallback/doplněk) */}
@@ -596,6 +925,10 @@ export function FloorplansFields({
                 ) : null}
                 {f.rooms.map((r, ri) => {
                   const placed = r.x !== null && r.y !== null;
+                  const hasPolygon = (r.polygon?.length ?? 0) > 0;
+                  // Hotový obrys (3+ body) dostává číslo shodné s veřejnou stránkou;
+                  // rozpracovaný (1–2 body) se ještě nepočítá (neuloží se stejně).
+                  const polyDone = (r.polygon?.length ?? 0) >= 3;
                   const isSel = Boolean(selected && selected.fi === fi && selected.ri === ri);
                   return (
                     <div
@@ -615,13 +948,19 @@ export function FloorplansFields({
                             fontSize: "0.72rem",
                             fontWeight: 700,
                             color: "#fff",
-                            background: placed ? "#d64545" : "#475569",
+                            background: hasPolygon ? "#0ea5e9" : placed ? "#d64545" : "#475569",
                             borderRadius: "999px",
                             padding: "0.1rem 0.55rem",
                             whiteSpace: "nowrap",
                           }}
                         >
-                          {placed ? `📍 ${pinNo[ri]}` : "v seznamu"}
+                          {polyDone
+                            ? `⬠ ${roomNo[ri]}`
+                            : hasPolygon
+                              ? "⬠ rozkresleno"
+                              : placed
+                                ? `📍 ${roomNo[ri]}`
+                                : "v seznamu"}
                         </span>
                         <input style={{ ...input, flex: 2 }} type="text" value={r.name} maxLength={80} placeholder="Název (např. Kuchyně)" onChange={(e) => setRoom(fi, ri, "name", e.target.value)} onFocus={() => setSelected({ fi, ri })} />
                         <input style={{ ...input, flex: 1 }} type="text" value={r.area} maxLength={40} placeholder="Plocha" onChange={(e) => setRoom(fi, ri, "area", e.target.value)} />
@@ -637,16 +976,29 @@ export function FloorplansFields({
                       {planUrl ? (
                         <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
                           {placed ? (
-                            <button type="button" style={smallBtn} onClick={() => setPin(fi, ri, null, null)}>Sundat z plánu</button>
+                            <button type="button" style={smallBtn} onClick={() => setPin(fi, ri, null, null)}>Sundat špendlík z plánu</button>
                           ) : (
                             <button
                               type="button"
                               style={{ ...smallBtn, ...(placing && placing.fi === fi && placing.ri === ri ? { borderColor: "#fde047", color: "#fde047" } : {}) }}
-                              onClick={() => setPlacing({ fi, ri })}
+                              onClick={() => { setOutlining(null); setPlacing({ fi, ri }); }}
                             >
-                              {placing && placing.fi === fi && placing.ri === ri ? "Klikni do plánu…" : "Umístit na plán"}
+                              {placing && placing.fi === fi && placing.ri === ri ? "Klikni do plánu…" : "Umístit špendlík"}
                             </button>
                           )}
+                          {/* Obrys místnosti (varianta B): otevře kreslení polygonu nad plánem. */}
+                          <button
+                            type="button"
+                            style={{ ...smallBtn, ...(outliningHere === ri ? { borderColor: "#38bdf8", color: "#38bdf8" } : {}) }}
+                            onClick={() => { setPlacing(null); setSelected({ fi, ri }); setOutlining({ fi, ri }); }}
+                          >
+                            {outliningHere === ri ? "Obtahuješ…" : hasPolygon ? "Upravit obrys" : "Obtáhnout obrys"}
+                          </button>
+                          {hasPolygon ? (
+                            <button type="button" style={{ ...smallBtn, color: "#fca5a5", borderColor: "rgba(248,113,113,0.4)" }} onClick={() => { setRoomPolygon(fi, ri, []); if (outliningHere === ri) setOutlining(null); }}>
+                              Smazat obrys
+                            </button>
+                          ) : null}
                         </div>
                       ) : null}
                     </div>
@@ -664,6 +1016,50 @@ export function FloorplansFields({
         <button type="button" style={{ ...smallBtn, padding: "0.5rem 0.9rem" }} onClick={addFloor}>+ Přidat patro</button>
       </div>
     </>
+  );
+}
+
+// =====================================================================
+//  HERO — obtažená hranice pozemku přes hlavní fotku (jako u Otínské)
+//  Volitelné: bez nakresleného obrysu hero vypadá jako dnes. Body se ukládají
+//  v % (0–100) vůči fotce (sdílený nástroj ImagePolygonEditor) → sedí na mobilu
+//  i velké obrazovce. Skryté pole `land_polygon_json` posílá body do saveHero.
+// =====================================================================
+export function HeroLandPolygonFields({
+  heroPhotoUrl,
+  initialPolygon,
+}: {
+  heroPhotoUrl?: string;
+  initialPolygon: PolygonPoint[];
+}) {
+  const [points, setPoints] = useState<PolygonPoint[]>(initialPolygon);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+      {/* Body jdou do saveHero i bez fotky (aby se dřív nakreslený obrys neztratil). */}
+      <input type="hidden" name="land_polygon_json" value={JSON.stringify(points)} />
+      <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>Hranice pozemku (nepovinné)</span>
+      {heroPhotoUrl ? (
+        <>
+          <p style={hint}>
+            Obtáhni na hlavní fotce hranici pozemku. Na veřejné stránce se přes fotku vykreslí
+            jako průsvitný obrys (jako u Otínské) — návštěvník hned vidí, co se prodává. Bez
+            obtažení hero vypadá jako dnes.
+          </p>
+          <ImagePolygonEditor
+            imageUrl={heroPhotoUrl}
+            points={points}
+            onChange={setPoints}
+            stroke="#f5b301"
+            fill="rgba(245,179,1,0.20)"
+            maxPoints={60}
+          />
+        </>
+      ) : (
+        <p style={hint}>
+          Nejdřív vyber hlavní fotku v kroku Fotky — pak nad ní půjde obtáhnout hranici pozemku.
+        </p>
+      )}
+    </div>
   );
 }
 

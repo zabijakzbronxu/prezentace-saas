@@ -628,3 +628,97 @@ prezentace (stejná logika jako u fotek).
 - **Rollback:** migrace je aditivní (nové tabulky/bucket/funkce); kód přes
   `git revert`. Stará cesta funguje dál.
 - **Neověřeno strojově** — viz krok 2. Skutečné „hotovo" je až po tvém testu + kliku.
+
+---
+
+# 2026-07-28 — 360° PANORAMA: skutečný interaktivní prohlížeč (nahrazuje „připravujeme")
+
+## Poctivé přiznání (jako minule)
+**Nespustil jsem testy, typecheck, lint ani build** — prostředí, kde příkazy pouštím,
+bylo mimo provoz (došlé místo). **Kód je hotový a na disku, ale strojově NEOVĚŘENÝ.**
+Neříkám, že je zeleno, když jsem to neviděl. Prošel jsem to čtením + křížovou revizí
+čerstvým agentem. První krok je proto ověření u tebe. Do té doby ber vše jako
+**HOTOVÉ-NEOVĚŘENÉ**.
+
+## Co je nového (laicky)
+Sekce **360° panorama** už není statická fotka s cedulkou „připravujeme". Teď je to
+**skutečná interaktivní prohlídka**:
+- **Majitel** v kroku Sekce → 360° panorama:
+  1. přidá **scénu** a nahraje **kulovou (equirektangulární) 360° fotku** — běžný výstup
+     z 360° kamery nebo z režimu „Panorama / Photo Sphere" v mobilu (poměr stran 2:1);
+  2. **klikáním do fotky** rozmístí **body (hotspoty)** — každému dá název, popis a
+     případně fotku. Špendlík jde přetáhnout přesně tam, kam patří;
+  3. může přidat **víc scén** (např. per místnost / patro) s vlastním názvem.
+- **Návštěvník** na veřejné stránce panorama **otáčí tažením myší i prstem**, kolečkem
+  nebo tlačítky **přibližuje**, klikne na **bod** → otevře se okno s názvem/fotkou/popisem,
+  má i **celou obrazovku**. Funguje na mobilu (dotyk) i na počítači.
+- **Bez placeného klíče a bez cizí služby.** Prohlížeč je vlastní, lehký (WebGL),
+  **žádný nový balík se neinstaluje**. Když prohlížeč návštěvníka WebGL neumí,
+  ukáže se aspoň statická fotka (nic se nerozbije).
+
+**Zpětná kompatibilita:** kdo měl dřív nahranou starou statickou panorama fotku, uvidí
+ji dál (jako obrázek). Když otevřeš editor, stará fotka se nabídne jako **Scéna 1** —
+stačí ji doplnit o body a uložit, a stane se interaktivní.
+
+## Udělej v tomhle pořadí
+
+### 1. Migrace databáze — NENÍ potřeba
+Panorama data bydlí v JSONB (`content`), typ sekce `panorama` už v databázi povolený je.
+**Žádnou migraci nespouštěj.** (Registrace obrázků scén i bodů jede přes stávající
+funkci `sync_presentation_media` — beze změny schématu.)
+
+### 2. Ověření kódu (u tebe) — NEinstaluje se nic nového
+```
+cd ~/Desktop/prezentace-saas/app
+npm test && npm run typecheck && npm run lint && npm run build
+```
+Přidal jsem testy na panorama (parsování scén/bodů, zpětná kompatibilita, převod
+klik↔yaw/pitch, projekce bodů). **Číslo testů neuvádím — nespouštěl jsem je.** Když
+něco spadne, pošli mi celý výpis, opravím.
+
+### 3. Klik v prohlížeči
+`npm run dev` → přihlas se → prezentace → krok **Sekce** → **360° panorama**:
+1. Přidej scénu, nahraj **equirektangulární** 360° fotku (2:1). Pozor: obyčejná
+   širokoúhlá fotka není 360° — otáčení pak vypadá divně. Vezmi výstup z 360° kamery
+   nebo z mobilního „Photo Sphere".
+2. Klikni párkrát do fotky → přibudou body 1, 2, 3… Vyplň jim název/popis, u jednoho
+   nahraj fotku. Špendlík zkus přetáhnout.
+3. **Náhled ↗** → panorama otáčej tažením (myší i na mobilu prstem), zkus zoom
+   (kolečko / tlačítka +−), klikni na bod (otevře okno), zkus celou obrazovku.
+4. Otevři náhled i v **anonymním okně** u publikované prezentace — panorama musí jít
+   taky (obrázky se podepisují jako u fotek).
+
+### 4. Commit (z kořene repa)
+Sandbox je bez místa → **necommitnul jsem**. Až bude u tebe zeleno:
+```
+cd ~/Desktop/prezentace-saas
+git add -A
+git commit -m "Panorama: interaktivní 360° prohlížeč (scény + hotspoty), nahrazuje statickou fotku"
+```
+Cesty mají hranaté závorky (`[slug]`, `[id]`) — `git add -A` je bere v pořádku.
+**NEPUSHUJ**, dokud si to neproklikáš. Push je pořád tvůj vědomý krok.
+
+## ⚠ Co čeká na TVŮJ klíč (schválně NEHOTOVO — nefejkoval jsem)
+**Automatické načítání bodů / recenzí z Google Places** = BUDOUCNOST. Ruční body
+fungují plně a nic nestojí. Živé napojení (aby se body v okolí — MHD, obchody… — i
+s recenzemi natáhly samy) vyžaduje **placený Google Maps / Places API klíč**.
+- Model je na to **připravený** (u bodu je pole `target_scene` a jde doplnit další).
+- *Co zařídit, až budeš chtít:* v Google Cloud Console zapnout **Places API**,
+  vygenerovat klíč, dát ho do prostředí (`GOOGLE_PLACES_API_KEY` ve Vercelu). Pak
+  doděláme tlačítko „načíst body z okolí". Do té doby zůstává ruční klikání — plné.
+
+## Co jsem rozhodl za tebe (řekni, jestli souhlasíš)
+1. **Vlastní WebGL prohlížeč místo knihovny** (Pannellum / Three.js). Proč: nemůžu tady
+   ověřit build, a přidat cizí balík naslepo = riziko, které bys neodladil. Vlastní
+   řešení nic neinstaluje a má fallback na statickou fotku. Kdybys chtěl přejít na
+   hotovou knihovnu, řekni.
+2. **Body se umísťují klikáním do ploché fotky** (ne otáčením 3D). Pro laika je to
+   jednodušší a u equirektangulární fotky je převod přesný.
+3. **Limity:** 20 scén na sekci, 60 bodů na scénu, fotka do 15 MB (jako ostatní média).
+
+## Rizika / rollback
+- **Riziko:** nová veřejná komponenta (WebGL) + přepsaný editor. Pojistky: fallback na
+  statický obrázek, zpětná kompatibilita starých dat, veřejné čtení obrázků vázané na
+  publikaci (stejně jako fotky).
+- **Rollback:** vše přes `git revert` (žádná migrace). Stará statická data se ukážou dál.
+- **Neověřeno strojově** — viz krok 2. Skutečné „hotovo" je až po tvém testu + kliku.

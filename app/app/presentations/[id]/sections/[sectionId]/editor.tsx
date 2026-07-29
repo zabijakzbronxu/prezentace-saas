@@ -15,7 +15,7 @@ import {
 } from "@/lib/presentations/sections";
 import { saveSection } from "./actions";
 import { RepeatableItems } from "./repeatable";
-import { AnalyticMapsFields, PanoramaFields, FloorplansFields } from "./media-editors";
+import { AnalyticMapsFields, PanoramaFields, FloorplansFields, HeroLandPolygonFields } from "./media-editors";
 
 export type GalleryPhoto = {
   id: string;
@@ -28,6 +28,10 @@ export type SectionDefaults = {
   // hero
   subtitle?: string;
   showPrice?: boolean;
+  /** Podepsané URL hlavní fotky — podklad pro obtažení hranice pozemku. */
+  heroPhotoUrl?: string;
+  /** Už nakreslená hranice pozemku (body v %, 0–100). */
+  heroPolygon?: { x: number; y: number }[];
   // text
   textHeading?: string;
   textSource?: string | null;
@@ -64,7 +68,16 @@ export type SectionDefaults = {
   items?: Record<string, string>[];
   // obrázkové sekce (kolo 2/3)
   mapsItems?: { title: string; caption: string; group: string; why: string; image_path: string }[];
-  panorama?: { heading: string; caption: string; image_path: string };
+  panorama?: {
+    heading: string;
+    caption: string;
+    scenes: {
+      id: string;
+      title: string;
+      image_path: string;
+      hotspots: { id: string; yaw: number; pitch: number; title: string; description: string; image_path: string }[];
+    }[];
+  };
   // floorsData (ne „floors" — to je string u parametrů, kolidovalo by v tomto typu)
   floorsData?: {
     label: string;
@@ -149,8 +162,8 @@ export function SectionEditor({
           userId={userId}
           heading={defaults.panorama?.heading ?? ""}
           caption={defaults.panorama?.caption ?? ""}
-          imagePath={defaults.panorama?.image_path ?? ""}
-          currentUrl={defaults.panorama?.image_path ? defaults.mediaUrls?.[defaults.panorama.image_path] : undefined}
+          initialScenes={defaults.panorama?.scenes ?? []}
+          mediaUrls={defaults.mediaUrls ?? {}}
         />
       ) : null}
       {kind === "floorplans" ? (
@@ -213,6 +226,7 @@ function HeroFields({ presentationId, defaults }: { presentationId: string; defa
         <input type="checkbox" name="show_price" defaultChecked={defaults.showPrice ?? true} />
         Zobrazit cenu v úvodním bloku
       </label>
+      <HeroLandPolygonFields heroPhotoUrl={defaults.heroPhotoUrl} initialPolygon={defaults.heroPolygon ?? []} />
       <p style={hint}>
         <Link href={`/presentations/${presentationId}/edit`} style={{ color: "var(--accent)" }}>
           Upravit titulek a cenu (Základ)

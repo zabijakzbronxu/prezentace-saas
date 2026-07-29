@@ -86,36 +86,121 @@ export function MapTabs({ maps }: { maps: MapView[] }) {
 }
 
 // ---- půdorysy -------------------------------------------------------
-// x/y = pozice špendlíku místnosti v % plánu (0–100); compass = natočení severu.
-// Zpětná kompatibilita: místnost bez x/y se ukáže jen v seznamu (jako dřív), patro
-// bez compass nemá růžici. Když nemá špendlík nikdo, vypadá sekce jako původní seznam.
-export type RoomView = { name: string; area?: string; description?: string; url?: string; x?: number; y?: number };
+// x/y = pozice špendlíku místnosti v % plánu (0–100); polygon = obtažený obrys
+// místnosti (body v %); compass = natočení severu.
+// Zpětná kompatibilita: místnost bez x/y i bez polygonu se ukáže jen v seznamu
+// (jako dřív), patro bez compass nemá růžici. Místnost s polygonem se vykreslí jako
+// klikací barevné pole; má-li místnost i špendlík, přednost dostane pole (špendlík
+// se u ní neduplikuje). Když neoznačuje plán nikdo, vypadá sekce jako původní seznam.
+export type PolyPoint = { x: number; y: number };
+export type RoomView = { name: string; area?: string; description?: string; url?: string; x?: number; y?: number; polygon?: PolyPoint[] };
 export type FloorView = { label: string; url?: string; compass?: number; rooms: RoomView[] };
+
+/** Těžiště polygonu (prostý průměr vrcholů) — kam umístit číslo/štítek pole. */
+function polygonCentroid(pts: PolyPoint[]): PolyPoint {
+  const s = pts.reduce((a, p) => ({ x: a.x + p.x, y: a.y + p.y }), { x: 0, y: 0 });
+  return { x: s.x / pts.length, y: s.y / pts.length };
+}
 
 export function FloorplansView({ floors }: { floors: FloorView[] }) {
   const [active, setActive] = useState(0);
   const [room, setRoom] = useState<RoomView | null>(null);
+  // Zvýraznění pole při najetí myší (dotyk hover nemá → tam se řeší klikem).
+  const [hovered, setHovered] = useState<number | null>(null);
   const floor = floors[active] ?? floors[0];
   if (!floor) return null;
 
   const hasImage = Boolean(floor.url);
-  // Špendlík dostanou jen místnosti s pozicí (a jen když je nahraný plán).
-  let pinCount = 0;
+  // Označené místnosti dostanou pořadové číslo (obrys i špendlík dohromady, v pořadí).
+  // Obrys má přednost: místnost s polygonem se kreslí jako pole, ne jako špendlík.
+  let placedCount = 0;
   const numbered = floor.rooms.map((r) => {
-    const isPin = hasImage && typeof r.x === "number" && typeof r.y === "number";
-    return { r, isPin, no: isPin ? ++pinCount : 0 };
+    const hasPolygon = hasImage && Array.isArray(r.polygon) && r.polygon.length >= 3;
+    const hasPin = hasImage && !hasPolygon && typeof r.x === "number" && typeof r.y === "number";
+    const placed = hasPolygon || hasPin;
+    return { r, hasPolygon, isPin: hasPin, no: placed ? ++placedCount : 0 };
   });
   const pins = numbered.filter((n) => n.isPin);
+  const polys = numbered.filter((n) => n.hasPolygon);
 
   return (
     <div>
-      <Tabs labels={floors.map((f) => f.label)} active={active} onSelect={(i) => { setActive(i); setRoom(null); }} />
+      <Tabs labels={floors.map((f) => f.label)} active={active} onSelect={(i) => { setActive(i); setRoom(null); setHovered(null); }} />
 
       <div style={{ display: "grid", gap: "1.2rem", gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))" }}>
         {floor.url ? (
           <div style={{ position: "relative", borderRadius: "12px", overflow: "hidden", border: `1px solid ${BORDER}`, background: PAPER_ALT }}>
             {/* eslint-disable-next-line @next/next/no-img-element -- podepsané URL jsou dočasné */}
             <img src={floor.url} alt={`Půdorys — ${floor.label}`} style={{ width: "100%", display: "block" }} />
+
+            {/* Obrysy místností = klikací barevná pole. SVG vrstva přes plán:
+                viewBox 0..100 + preserveAspectRatio="none" → body v % sedí bez ohledu
+                na poměr stran; vectorEffect drží tloušťku obrysu konstantní. */}
+            {polys.length > 0 ? (
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
+                {polys.map(({ r, no }, i) => {
+                  const on = hovered === no;
+                  return (
+                    <polygon
+                      key={i}
+                      points={r.polygon!.map((p) => `${p.x},${p.y}`).join(" ")}
+                      onClick={() => setRoom(r)}
+                      onMouseEnter={() => setHovered(no)}
+                      onMouseLeave={() => setHovered((h) => (h === no ? null : h))}
+                      style={{
+                        fill: on ? "rgba(214,69,69,0.42)" : "rgba(214,69,69,0.22)",
+                        stroke: "#d64545",
+                        strokeWidth: on ? 2.4 : 1.6,
+                        cursor: "pointer",
+                        transition: "fill 0.12s ease",
+                      }}
+                      vectorEffect="non-scaling-stroke"
+                      strokeLinejoin="round"
+                    >
+                      <title>{r.name || `Místnost ${no}`}</title>
+                    </polygon>
+                  );
+                })}
+              </svg>
+            ) : null}
+
+            {/* Číselné štítky polí (v těžišti obrysu) — klikací stejně jako pole. */}
+            {polys.map(({ r, no }, i) => {
+              const c = polygonCentroid(r.polygon!);
+              return (
+                <button
+                  key={`lbl-${i}`}
+                  type="button"
+                  onClick={() => setRoom(r)}
+                  onMouseEnter={() => setHovered(no)}
+                  onMouseLeave={() => setHovered((h) => (h === no ? null : h))}
+                  aria-label={r.name || `Místnost ${no}`}
+                  title={r.name || `Místnost ${no}`}
+                  style={{
+                    position: "absolute",
+                    left: `${c.x}%`,
+                    top: `${c.y}%`,
+                    transform: "translate(-50%, -50%)",
+                    width: "26px",
+                    height: "26px",
+                    borderRadius: "999px",
+                    border: "2px solid #fff",
+                    background: "#d64545",
+                    color: "#fff",
+                    fontSize: "0.8rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    boxShadow: "0 1px 5px rgba(0,0,0,0.45)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {no}
+                </button>
+              );
+            })}
+
             {pins.map(({ r, no }, i) => (
               <button
                 key={i}
@@ -160,13 +245,13 @@ export function FloorplansView({ floors }: { floors: FloorView[] }) {
         {numbered.length > 0 ? (
           <div>
             <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: INK, marginBottom: "0.6rem" }}>Místnosti</h3>
-            {pins.length > 0 ? (
+            {pins.length > 0 || polys.length > 0 ? (
               <p style={{ color: MUTED, fontSize: "0.85rem", marginBottom: "0.6rem" }}>
-                Klikněte na špendlík v plánu nebo na místnost v seznamu — otevře se fotka a popis.
+                Klikněte na pole nebo špendlík v plánu, nebo na místnost v seznamu — otevře se fotka a popis.
               </p>
             ) : null}
             <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-              {numbered.map(({ r, no, isPin }, i) => {
+              {numbered.map(({ r, no, isPin, hasPolygon }, i) => {
                 const clickable = Boolean(r.url || r.description);
                 return (
                   <li key={i}>
@@ -188,7 +273,7 @@ export function FloorplansView({ floors }: { floors: FloorView[] }) {
                       }}
                     >
                       <span style={{ display: "flex", alignItems: "center", gap: "0.5rem", minWidth: 0 }}>
-                        {isPin ? (
+                        {isPin || hasPolygon ? (
                           <span style={{ flexShrink: 0, width: "1.4rem", height: "1.4rem", borderRadius: "999px", background: "#d64545", color: "#fff", fontSize: "0.75rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
                             {no}
                           </span>
