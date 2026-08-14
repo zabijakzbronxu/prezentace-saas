@@ -114,6 +114,20 @@ export default async function PresentationSectionsPage({
             <WizardNav presentationId={p.id} current="sections" />
             <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
               <Link
+                href={`/presentations/${p.id}/inquiries`}
+                style={{
+                  fontSize: "0.85rem",
+                  fontWeight: 600,
+                  color: "var(--accent)",
+                  border: "1px solid var(--accent)",
+                  borderRadius: "8px",
+                  padding: "0.35rem 0.8rem",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                📨 Poptávky
+              </Link>
+              <Link
                 href={`/presentations/${p.id}/design`}
                 style={{
                   fontSize: "0.85rem",

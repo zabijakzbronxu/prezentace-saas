@@ -335,6 +335,38 @@ export interface Database {
           },
         ];
       };
+      // ===== Kontaktní poptávky z veřejné stránky (2026-08-14) =====
+      presentation_inquiries: {
+        Row: {
+          id: string;
+          presentation_id: string;
+          name: string;
+          email: string | null;
+          phone: string | null;
+          message: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          presentation_id: string;
+          name: string;
+          email?: string | null;
+          phone?: string | null;
+          message: string;
+          created_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["presentation_inquiries"]["Insert"]
+        >;
+        Relationships: [
+          {
+            foreignKeyName: "presentation_inquiries_presentation_id_fkey";
+            columns: ["presentation_id"];
+            referencedRelation: "presentations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       // ===== Otínská — model připravený pro další kola (zatím bez renderu) =====
       presentation_floors: {
         Row: {

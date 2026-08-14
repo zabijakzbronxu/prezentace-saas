@@ -278,6 +278,8 @@ export type ValuationItem = {
   min_czk?: number | null;
   max_czk?: number | null;
   note?: string;
+  /** Screenshot z cizí kalkulačky (cesta v bucketu presentation-media). */
+  image_path?: string;
 };
 export type ValuationContent = { heading?: string; items: ValuationItem[] };
 
@@ -296,6 +298,10 @@ export type ConditionItem = {
   category: string;
   condition?: ConditionState;
   description?: string;
+  /** Fotka položky (cesta v bucketu presentation-media). */
+  image_path?: string;
+  /** Odkaz na přiložený dokument = id řádku v presentation_documents. */
+  document_id?: string;
 };
 export type ConditionContent = { heading?: string; items: ConditionItem[] };
 
@@ -318,6 +324,13 @@ function asString(v: unknown): string | undefined {
 }
 function asNumberOrNull(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+/** UUID z JSONB, jinak undefined (odkaz na řádek v DB — musí mít pevný tvar). */
+function asUuid(v: unknown): string | undefined {
+  return typeof v === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+    ? v
+    : undefined;
 }
 
 /**
@@ -378,6 +391,7 @@ export function readValuationContent(content: unknown): ValuationContent {
         min_czk: asNumberOrNull(it.min_czk),
         max_czk: asNumberOrNull(it.max_czk),
         note: asString(it.note),
+        image_path: asString(it.image_path),
       };
     })
     .filter((x): x is ValuationItem => x !== null);
@@ -395,6 +409,8 @@ export function readConditionContent(content: unknown): ConditionContent {
         category,
         condition: isConditionState(it.condition) ? it.condition : undefined,
         description: asString(it.description),
+        image_path: asString(it.image_path),
+        document_id: asUuid(it.document_id),
       };
     })
     .filter((x): x is ConditionItem => x !== null);
@@ -404,6 +420,60 @@ export function readConditionContent(content: unknown): ConditionContent {
 export function readGalleryContent(content: unknown): GalleryContent {
   const c = (content ?? {}) as Record<string, unknown>;
   return { heading: asString(c.heading) };
+}
+
+// ---- Seskupení galerie podle kategorie (L-nález z gap auditu) --------
+// `category` u fotky se už z DB načítá; tady je čistá logika, jak fotky
+// seskupit a pojmenovat kategorie. Sdílí ji galerie i test. Fotky bez
+// kategorie spadnou do „Ostatní"; pořadí skupin: známé kategorie napřed
+// (v pořadí jako v editoru), pak ostatní v pořadí prvního výskytu, „Ostatní"
+// nakonec. Pořadí fotek uvnitř skupiny se zachovává.
+export const GALLERY_CATEGORY_LABEL: Record<string, string> = {
+  exterier: "Exteriér",
+  interier: "Interiér",
+  zahrada: "Zahrada",
+  okoli: "Okolí",
+};
+const GALLERY_CATEGORY_ORDER: readonly string[] = ["exterier", "interier", "zahrada", "okoli"];
+export const GALLERY_OTHER_LABEL = "Ostatní";
+
+/** Lidský název kategorie fotky; prázdná/neznámá → „Ostatní" resp. syrová hodnota. */
+export function galleryCategoryLabel(cat: string | null | undefined): string {
+  const c = typeof cat === "string" ? cat.trim() : "";
+  if (!c) return GALLERY_OTHER_LABEL;
+  return GALLERY_CATEGORY_LABEL[c] ?? c;
+}
+
+export type GalleryCategoryGroup<T> = { key: string; label: string; items: T[] };
+
+/**
+ * Seskupí fotky podle `category`. Vrací skupiny v ustáleném pořadí (známé
+ * kategorie, pak ostatní dle prvního výskytu, „Ostatní" nakonec). Prázdná
+ * kategorie = klíč "". Když má aspoň jedna fotka kategorii, vzniknou nadpisy;
+ * když nikdo kategorii nenastavil, vyjde jediná skupina "" (galerie ji pak
+ * vykreslí bez nadpisu, jako dřív).
+ */
+export function groupByGalleryCategory<T extends { category?: string | null }>(
+  items: readonly T[],
+): GalleryCategoryGroup<T>[] {
+  const buckets = new Map<string, T[]>();
+  const seen: string[] = [];
+  for (const it of items) {
+    const key = typeof it.category === "string" ? it.category.trim() : "";
+    if (!buckets.has(key)) {
+      buckets.set(key, []);
+      seen.push(key);
+    }
+    buckets.get(key)!.push(it);
+  }
+  const known = GALLERY_CATEGORY_ORDER.filter((k) => buckets.has(k));
+  const others = seen.filter((k) => k !== "" && !GALLERY_CATEGORY_ORDER.includes(k));
+  const orderedKeys = [...known, ...others, ...(buckets.has("") ? [""] : [])];
+  return orderedKeys.map((key) => ({
+    key,
+    label: galleryCategoryLabel(key),
+    items: buckets.get(key)!,
+  }));
 }
 
 export function readMapContent(content: unknown): MapContent {

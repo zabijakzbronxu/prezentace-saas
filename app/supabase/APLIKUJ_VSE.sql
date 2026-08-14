@@ -2146,3 +2146,40 @@ from (values
 ) as s(pol)
 
 order by 1, 2;
+
+
+-- =====================================================================
+-- 6f) KONTAKTNÍ POPTÁVKY — formulář na veřejné stránce (2026-08-14)
+--     (migrace 20260814120000_kontaktni_poptavky) — INSERT smí kdokoliv na
+--     PUBLISHED prezentaci; SELECT jen vlastník; žádný UPDATE/DELETE.
+--     Aditivní + idempotentní.
+-- =====================================================================
+create table if not exists public.presentation_inquiries (
+  id              uuid primary key default gen_random_uuid(),
+  presentation_id uuid not null references public.presentations (id) on delete cascade,
+  name            text not null check (char_length(name) between 1 and 120),
+  email           text check (email is null or char_length(email) <= 200),
+  phone           text check (phone is null or char_length(phone) <= 30),
+  message         text not null check (char_length(message) between 1 and 2000),
+  created_at      timestamptz not null default now()
+);
+create index if not exists presentation_inquiries_presentation_idx
+  on public.presentation_inquiries (presentation_id, created_at desc);
+
+alter table public.presentation_inquiries enable row level security;
+
+drop policy if exists "inquiries owner read" on public.presentation_inquiries;
+create policy "inquiries owner read" on public.presentation_inquiries
+  for select
+  using (exists (
+    select 1 from public.presentations p
+    where p.id = presentation_id and p.owner_id = auth.uid()
+  ));
+
+drop policy if exists "inquiries public insert published" on public.presentation_inquiries;
+create policy "inquiries public insert published" on public.presentation_inquiries
+  for insert to anon, authenticated
+  with check (exists (
+    select 1 from public.presentations p
+    where p.id = presentation_id and p.status = 'published'
+  ));

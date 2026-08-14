@@ -14,7 +14,12 @@ import {
   MEDIA_LIMITS_HINT,
 } from "@/lib/media";
 import { sniffImageType } from "@/lib/photos";
-import { panoXyToYawPitch, panoYawPitchToXy } from "@/lib/presentations/sections";
+import {
+  panoXyToYawPitch,
+  panoYawPitchToXy,
+  CONDITION_STATES,
+  CONDITION_LABEL,
+} from "@/lib/presentations/sections";
 import { input, label, hint, smallBtn } from "../../../ui";
 import { CompassRose } from "../../../../listing/[slug]/compass";
 import { ImagePolygonEditor, type PolygonPoint } from "./polygon-editor";
@@ -1082,3 +1087,243 @@ const dangerBtn: React.CSSProperties = {
   color: "#fca5a5",
   borderColor: "rgba(248,113,113,0.4)",
 };
+
+// =====================================================================
+//  ODHADY CENY — nezávislé odhady + SCREENSHOT z cizí kalkulačky
+//  (nejsilnější psychologický prvek Otínské: cenu obhajují cizí kalkulačky)
+// =====================================================================
+type ValItem = {
+  source: string;
+  url: string;
+  estimate_czk: string;
+  min_czk: string;
+  max_czk: string;
+  note: string;
+  image_path: string;
+};
+
+export function ValuationFields({
+  presentationId,
+  userId,
+  heading,
+  initialItems,
+  mediaUrls,
+}: {
+  presentationId: string;
+  userId: string;
+  heading: string;
+  initialItems: ValItem[];
+  mediaUrls: Record<string, string>;
+}) {
+  const [items, setItems] = useState<ValItem[]>(initialItems);
+
+  const set = (i: number, key: keyof ValItem, val: string) =>
+    setItems((p) => p.map((it, idx) => (idx === i ? { ...it, [key]: val } : it)));
+  const add = () =>
+    setItems((p) => [
+      ...p,
+      { source: "", url: "", estimate_czk: "", min_czk: "", max_czk: "", note: "", image_path: "" },
+    ]);
+  const remove = (i: number) => setItems((p) => p.filter((_, idx) => idx !== i));
+  const move = (i: number, d: -1 | 1) =>
+    setItems((p) => {
+      const n = [...p];
+      const t = i + d;
+      if (t < 0 || t >= n.length) return p;
+      [n[i], n[t]] = [n[t], n[i]];
+      return n;
+    });
+
+  return (
+    <>
+      <input type="hidden" name="items_json" value={JSON.stringify(items)} />
+      <label style={label}>
+        Nadpis sekce
+        <input style={input} type="text" name="heading" maxLength={200} placeholder="např. Nezávislé odhady ceny" defaultValue={heading} />
+      </label>
+      <p style={hint}>
+        U každého odhadu můžeš nahrát screenshot z cizí kalkulačky (Bezrealitky, Reas…) — je to nejsilnější
+        důkaz, že cenu drží nezávislé odhady. Náhled se ukáže na kartě odhadu, klik ho zvětší.
+      </p>
+
+      {items.length === 0 ? (
+        <p style={hint}>Zatím žádný odhad. Přidej ho tlačítkem níže.</p>
+      ) : (
+        items.map((it, i) => (
+          <div key={i} style={cardStyle}>
+            <div style={cardHeader}>
+              <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>Odhad {i + 1}</span>
+              <div style={{ display: "flex", gap: "0.35rem" }}>
+                <button type="button" style={smallBtn} onClick={() => move(i, -1)} disabled={i === 0}>↑</button>
+                <button type="button" style={smallBtn} onClick={() => move(i, 1)} disabled={i === items.length - 1}>↓</button>
+                <button type="button" style={dangerBtn} onClick={() => remove(i)}>Odebrat</button>
+              </div>
+            </div>
+            <label style={label}>
+              Zdroj
+              <input style={input} type="text" value={it.source} maxLength={120} placeholder="např. Reas, Bezrealitky…" onChange={(e) => set(i, "source", e.target.value)} />
+            </label>
+            <label style={label}>
+              Odkaz (nepovinné)
+              <input style={input} type="url" value={it.url} maxLength={500} placeholder="https://…" onChange={(e) => set(i, "url", e.target.value)} />
+            </label>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.6rem" }}>
+              <label style={label}>
+                Odhad (Kč)
+                <input style={input} type="text" inputMode="numeric" value={it.estimate_czk} placeholder="8900000" onChange={(e) => set(i, "estimate_czk", e.target.value)} />
+              </label>
+              <label style={label}>
+                Od (Kč)
+                <input style={input} type="text" inputMode="numeric" value={it.min_czk} placeholder="8500000" onChange={(e) => set(i, "min_czk", e.target.value)} />
+              </label>
+              <label style={label}>
+                Do (Kč)
+                <input style={input} type="text" inputMode="numeric" value={it.max_czk} placeholder="9300000" onChange={(e) => set(i, "max_czk", e.target.value)} />
+              </label>
+            </div>
+            <label style={label}>
+              Poznámka (nepovinné)
+              <input style={input} type="text" value={it.note} maxLength={300} placeholder="krátká poznámka" onChange={(e) => set(i, "note", e.target.value)} />
+            </label>
+            <div>
+              <span style={{ ...label, marginBottom: "0.3rem", display: "block" }}>Screenshot odhadu (nepovinné)</span>
+              <MediaUploader
+                presentationId={presentationId}
+                userId={userId}
+                currentUrl={it.image_path ? mediaUrls[it.image_path] : undefined}
+                onUploaded={(path) => set(i, "image_path", path)}
+              />
+              {it.image_path ? (
+                <button type="button" style={{ ...smallBtn, marginTop: "0.4rem" }} onClick={() => set(i, "image_path", "")}>
+                  Odebrat screenshot
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ))
+      )}
+      <div>
+        <button type="button" style={{ ...smallBtn, padding: "0.5rem 0.9rem" }} onClick={add}>+ Přidat odhad</button>
+      </div>
+    </>
+  );
+}
+
+// =====================================================================
+//  TECHNICKÝ STAV — položka + štítek stavu + FOTKA + přiložený DOKUMENT
+// =====================================================================
+type CondItem = {
+  category: string;
+  condition: string;
+  description: string;
+  image_path: string;
+  document_id: string;
+};
+
+export function ConditionFields({
+  presentationId,
+  userId,
+  heading,
+  initialItems,
+  mediaUrls,
+  documentChoices,
+}: {
+  presentationId: string;
+  userId: string;
+  heading: string;
+  initialItems: CondItem[];
+  mediaUrls: Record<string, string>;
+  /** Už nahrané dokumenty prezentace (výběr, na který položku navázat). */
+  documentChoices: { id: string; name: string }[];
+}) {
+  const [items, setItems] = useState<CondItem[]>(initialItems);
+
+  const set = (i: number, key: keyof CondItem, val: string) =>
+    setItems((p) => p.map((it, idx) => (idx === i ? { ...it, [key]: val } : it)));
+  const add = () =>
+    setItems((p) => [...p, { category: "", condition: "", description: "", image_path: "", document_id: "" }]);
+  const remove = (i: number) => setItems((p) => p.filter((_, idx) => idx !== i));
+  const move = (i: number, d: -1 | 1) =>
+    setItems((p) => {
+      const n = [...p];
+      const t = i + d;
+      if (t < 0 || t >= n.length) return p;
+      [n[i], n[t]] = [n[t], n[i]];
+      return n;
+    });
+
+  return (
+    <>
+      <input type="hidden" name="items_json" value={JSON.stringify(items)} />
+      <label style={label}>
+        Nadpis sekce
+        <input style={input} type="text" name="heading" maxLength={200} placeholder="např. Technický stav" defaultValue={heading} />
+      </label>
+      <p style={hint}>
+        U každé položky můžeš přiložit fotku (např. detail střechy) a odkázat na dokument (revize,
+        protokol). Dokumenty se nahrávají v sekci Dokumenty ke stažení; tady se jen vybere ze seznamu.
+        Odkaz na dokument se veřejně ukáže, jen když je sekce Dokumenty zapnutá.
+      </p>
+
+      {items.length === 0 ? (
+        <p style={hint}>Zatím žádná položka. Přidej ji tlačítkem níže.</p>
+      ) : (
+        items.map((it, i) => (
+          <div key={i} style={cardStyle}>
+            <div style={cardHeader}>
+              <span style={{ fontSize: "0.8rem", color: "var(--muted)" }}>Položka {i + 1}</span>
+              <div style={{ display: "flex", gap: "0.35rem" }}>
+                <button type="button" style={smallBtn} onClick={() => move(i, -1)} disabled={i === 0}>↑</button>
+                <button type="button" style={smallBtn} onClick={() => move(i, 1)} disabled={i === items.length - 1}>↓</button>
+                <button type="button" style={dangerBtn} onClick={() => remove(i)}>Odebrat</button>
+              </div>
+            </div>
+            <label style={label}>
+              Co (kategorie)
+              <input style={input} type="text" value={it.category} maxLength={120} placeholder="např. Střecha" onChange={(e) => set(i, "category", e.target.value)} />
+            </label>
+            <label style={label}>
+              Stav
+              <select style={input} value={it.condition} onChange={(e) => set(i, "condition", e.target.value)}>
+                <option value="">—</option>
+                {CONDITION_STATES.map((c) => (
+                  <option key={c} value={c}>{CONDITION_LABEL[c]}</option>
+                ))}
+              </select>
+            </label>
+            <label style={label}>
+              Popis (nepovinné)
+              <textarea style={{ ...input, minHeight: "4rem", resize: "vertical", fontFamily: "inherit" }} value={it.description} maxLength={600} placeholder="např. Nová krytina 2021" onChange={(e) => set(i, "description", e.target.value)} />
+            </label>
+            <div>
+              <span style={{ ...label, marginBottom: "0.3rem", display: "block" }}>Fotka položky (nepovinné)</span>
+              <MediaUploader
+                presentationId={presentationId}
+                userId={userId}
+                currentUrl={it.image_path ? mediaUrls[it.image_path] : undefined}
+                onUploaded={(path) => set(i, "image_path", path)}
+              />
+              {it.image_path ? (
+                <button type="button" style={{ ...smallBtn, marginTop: "0.4rem" }} onClick={() => set(i, "image_path", "")}>
+                  Odebrat fotku
+                </button>
+              ) : null}
+            </div>
+            <label style={label}>
+              Přiložený dokument (nepovinné)
+              <select style={input} value={it.document_id} onChange={(e) => set(i, "document_id", e.target.value)}>
+                <option value="">— žádný —</option>
+                {documentChoices.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        ))
+      )}
+      <div>
+        <button type="button" style={{ ...smallBtn, padding: "0.5rem 0.9rem" }} onClick={add}>+ Přidat položku</button>
+      </div>
+    </>
+  );
+}

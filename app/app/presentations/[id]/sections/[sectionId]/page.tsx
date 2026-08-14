@@ -174,22 +174,37 @@ export default async function SectionEditorPage({
   } else if (kind === "valuation") {
     const v = readValuationContent(content);
     defaults.heading = v.heading ?? "";
-    defaults.items = v.items.map((it) => ({
+    defaults.valuationItems = v.items.map((it) => ({
       source: it.source,
       url: it.url ?? "",
       estimate_czk: it.estimate_czk != null ? String(it.estimate_czk) : "",
       min_czk: it.min_czk != null ? String(it.min_czk) : "",
       max_czk: it.max_czk != null ? String(it.max_czk) : "",
       note: it.note ?? "",
+      image_path: it.image_path ?? "",
     }));
+    for (const it of v.items) if (it.image_path) mediaPaths.push(it.image_path);
   } else if (kind === "technicalCondition") {
     const c = readConditionContent(content);
     defaults.heading = c.heading ?? "";
-    defaults.items = c.items.map((it) => ({
+    defaults.conditionItems = c.items.map((it) => ({
       category: it.category,
       condition: it.condition ?? "",
       description: it.description ?? "",
+      image_path: it.image_path ?? "",
+      document_id: it.document_id ?? "",
     }));
+    for (const it of c.items) if (it.image_path) mediaPaths.push(it.image_path);
+    // Výběr už nahraných dokumentů (na který lze navázat položku tech. stavu).
+    const { data: docChoices, error: docChoicesError } = await supabase
+      .from("presentation_documents")
+      .select("id, name, sort_order")
+      .eq("presentation_id", p.id)
+      .order("sort_order", { ascending: true });
+    if (docChoicesError) {
+      console.error("[sections/edit] načtení dokumentů pro tech. stav selhalo:", docChoicesError.message);
+    }
+    defaults.documentChoices = (docChoices ?? []).map((d) => ({ id: d.id, name: d.name }));
   } else if (kind === "poi") {
     const c = readPoiContent(content);
     defaults.heading = c.heading ?? "";

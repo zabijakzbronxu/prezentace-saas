@@ -13,6 +13,8 @@ import {
   readAnalyticMapsContent,
   panoramaMediaPaths,
   readFloorplansContent,
+  readValuationContent,
+  readConditionContent,
   type SectionKind,
 } from "@/lib/presentations/sections";
 import { SchemaErrorScreen, QueryErrorScreen } from "../../schema-error";
@@ -222,6 +224,10 @@ export default async function ListingPage({
         if (f.image_path) mediaPaths.push(f.image_path);
         for (const r of f.rooms) if (r.image_path) mediaPaths.push(r.image_path);
       }
+    } else if (s.kind === "valuation") {
+      for (const it of readValuationContent(s.content).items) if (it.image_path) mediaPaths.push(it.image_path);
+    } else if (s.kind === "technicalCondition") {
+      for (const it of readConditionContent(s.content).items) if (it.image_path) mediaPaths.push(it.image_path);
     }
   }
   if (mediaPaths.length > 0) {
@@ -238,7 +244,12 @@ export default async function ListingPage({
   const heroUrl = heroPhoto ? signedUrls.get(heroPhoto.storage_path) : undefined;
   const galleryImages: GalleryImage[] = photos
     .filter((ph) => ph.id !== heroPhoto?.id)
-    .map((ph) => ({ id: ph.id, url: signedUrls.get(ph.storage_path), caption: ph.caption ?? undefined }));
+    .map((ph) => ({
+      id: ph.id,
+      url: signedUrls.get(ph.storage_path),
+      caption: ph.caption ?? undefined,
+      category: ph.category ?? undefined,
+    }));
 
   const displayTitle = p.title || formatAddress(p) || "Prezentace nemovitosti";
   const address = formatAddress(p);

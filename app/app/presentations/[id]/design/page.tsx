@@ -16,6 +16,8 @@ import {
   readAnalyticMapsContent,
   panoramaMediaPaths,
   readFloorplansContent,
+  readValuationContent,
+  readConditionContent,
   type SectionKind,
   type SectionMeta,
 } from "@/lib/presentations/sections";
@@ -183,6 +185,10 @@ export default async function DesignPage({
         if (f.image_path) mediaPaths.push(f.image_path);
         for (const r of f.rooms) if (r.image_path) mediaPaths.push(r.image_path);
       }
+    } else if (s.kind === "valuation") {
+      for (const it of readValuationContent(s.content).items) if (it.image_path) mediaPaths.push(it.image_path);
+    } else if (s.kind === "technicalCondition") {
+      for (const it of readConditionContent(s.content).items) if (it.image_path) mediaPaths.push(it.image_path);
     }
   }
   if (mediaPaths.length > 0) {

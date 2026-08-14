@@ -42,6 +42,8 @@ import { Gallery, type GalleryImage } from "./gallery";
 import { MapTabs, FloorplansView, InvestmentCalcView } from "./listing-sections";
 import { PanoramaViewer } from "./panorama-viewer";
 import { LandPolygonOverlay } from "./land-polygon-overlay";
+import { MediaThumb } from "./media-thumb";
+import { ContactForm } from "./contact-form";
 
 // Světlá prezentační paleta (Playfair + Work Sans). Sdílená s page.tsx.
 export const INK = "#1c1917";
@@ -469,12 +471,19 @@ export function createSectionRenderer(
                 ? `${formatPrice(item.min_czk)} – ${formatPrice(item.max_czk)}`
                 : null;
               const main = item.estimate_czk != null ? formatPrice(item.estimate_czk) : range;
+              const shotUrl = item.image_path ? signedUrls.get(item.image_path) : undefined;
               return (
                 <div key={i} style={{ background: "#fff", border: `1px solid ${BORDER}`, borderRadius: "12px", padding: "1.25rem", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
                   <span style={{ color: MUTED, fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.06em" }}>{item.source}</span>
                   {main ? <strong style={{ fontFamily: DISPLAY, fontSize: "1.3rem", color: INK }}>{main}</strong> : null}
                   {item.estimate_czk != null && range ? <span style={{ color: MUTED, fontSize: "0.85rem" }}>rozpětí {range}</span> : null}
                   {item.note ? <span style={{ color: MUTED, fontSize: "0.85rem" }}>{item.note}</span> : null}
+                  {/* Screenshot z cizí kalkulačky = důkaz. Klik ho zvětší (lightbox). */}
+                  {shotUrl ? (
+                    <div style={{ marginTop: "0.3rem" }}>
+                      <MediaThumb url={shotUrl} alt={`Screenshot odhadu — ${item.source}`} />
+                    </div>
+                  ) : null}
                   {/* URL už je zneškodněná v readeru; sanitizace i tady u samotného href (belt-and-suspenders). */}
                   {safeExternalUrl(item.url) ? <a href={safeExternalUrl(item.url)} target="_blank" rel="noreferrer" style={{ color: INK, textDecoration: "underline", fontSize: "0.85rem" }}>zdroj ↗</a> : null}
                 </div>
@@ -498,22 +507,45 @@ export function createSectionRenderer(
       good: "#a6d96a",
       fair: "#fdae61",
     };
+    // Mapa dokumentů (id → náhledový odkaz) — plní se jen když je sekce Dokumenty
+    // zapnutá (RLS). Odkaz u položky se proto ukáže jen tehdy, jinak se vynechá.
+    const docById = new Map(documents.map((d) => [d.id, d]));
     return (
       <section style={band(bandIndex++)}>
         <div style={inner}>
           <h2 style={sectionTitle}>{c.heading || "Technický stav"}</h2>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-            {c.items.map((item, i) => (
-              <div key={i} style={{ display: "flex", gap: "0.9rem", alignItems: "baseline", background: "#fff", border: `1px solid ${BORDER}`, borderRadius: "10px", padding: "0.85rem 1rem", flexWrap: "wrap" }}>
-                <strong style={{ color: INK, minWidth: "8rem" }}>{item.category}</strong>
-                {item.condition ? (
-                  <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#fff", background: badgeColor[item.condition] ?? MUTED, borderRadius: "999px", padding: "0.15rem 0.7rem" }}>
-                    {CONDITION_LABEL[item.condition]}
-                  </span>
-                ) : null}
-                {item.description ? <span style={{ color: MUTED, flex: 1 }}>{item.description}</span> : null}
-              </div>
-            ))}
+            {c.items.map((item, i) => {
+              const photoUrl = item.image_path ? signedUrls.get(item.image_path) : undefined;
+              const doc = item.document_id ? docById.get(item.document_id) : undefined;
+              return (
+                <div key={i} style={{ background: "#fff", border: `1px solid ${BORDER}`, borderRadius: "10px", padding: "0.85rem 1rem", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+                  <div style={{ display: "flex", gap: "0.9rem", alignItems: "baseline", flexWrap: "wrap" }}>
+                    <strong style={{ color: INK, minWidth: "8rem" }}>{item.category}</strong>
+                    {item.condition ? (
+                      <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#fff", background: badgeColor[item.condition] ?? MUTED, borderRadius: "999px", padding: "0.15rem 0.7rem" }}>
+                        {CONDITION_LABEL[item.condition]}
+                      </span>
+                    ) : null}
+                    {item.description ? <span style={{ color: MUTED, flex: 1 }}>{item.description}</span> : null}
+                  </div>
+                  {photoUrl || (doc && doc.url) ? (
+                    <div style={{ display: "flex", gap: "0.9rem", alignItems: "center", flexWrap: "wrap" }}>
+                      {photoUrl ? (
+                        <div style={{ width: "180px", maxWidth: "100%" }}>
+                          <MediaThumb url={photoUrl} alt={`Foto — ${item.category}`} height="120px" />
+                        </div>
+                      ) : null}
+                      {doc && doc.url ? (
+                        <a href={doc.url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", padding: "0.45rem 0.9rem", borderRadius: "999px", border: `1px solid ${INK}`, color: INK, fontWeight: 600, fontSize: "0.85rem" }}>
+                          📄 {doc.name}
+                        </a>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -548,6 +580,9 @@ export function createSectionRenderer(
                   </a>
                 ) : null}
               </div>
+              {/* Kontaktní formulář: poptávka jde majiteli (do jeho účtu), nespoléhá
+                  na to, že mailto:/tel: na mobilu zafunguje. */}
+              <ContactForm presentationId={p.id} isPreview={isPreview} />
             </div>
           ) : (
             <>

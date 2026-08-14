@@ -2,6 +2,18 @@
 
 Po každé korekci od Karla sem zapiš vzorec chyby a pravidlo, které ji příště nedovolí (a doplň ho do RULES.md).
 
+## 2026-08-14 — levné dodělávky (technické vzorce z vlastní křížové revize)
+Vzorec 1: **mutace během renderu shodí ESLint (react-hooks/preserve-manual-memoization).**
+V galerii jsem počítal index přes `let i = 0; i++` uvnitř `.map()` v JSX — React Compiler
+to odmítl a kaskádou označil i sousední `useCallback`. Pravidlo: index/pořadí počítej
+předem čistě (ploché pole + `Map` id→index), nikdy `let x++` během renderu.
+Vzorec 2: **testy (vitest) v tomhle repu používají RELATIVNÍ importy, ne alias `@/`.**
+Nové testy s `@/lib/...` spadly na „Cannot find package"; alias řeší jen tsconfig
+(build/typecheck), ne vitest. Pravidlo: v `lib/__tests__/*` importuj přes `../…`.
+Vzorec 3: **render sekcí je SDÍLENÝ mezi veřejnou stránkou a `/design`** — když přidám
+nové médium do sekce, musím doplnit podepisování cest do OBOU stránek (`listing/[slug]/page.tsx`
+i `presentations/[id]/design/page.tsx`), jinak vlastník v náhledu obrázek nevidí.
+
 ## 2026-07-15 — nálezy Codex revize nad Otínskou (technické vzorce, ne korekce Karla)
 Vzorec 1: **veřejné čtení bránil jen stav `published`, ne „zapnuto“.** Vypnuté sekce
 i jejich dokumenty/obrázky šly přes přímý PostgREST/Storage stáhnout, i když je na

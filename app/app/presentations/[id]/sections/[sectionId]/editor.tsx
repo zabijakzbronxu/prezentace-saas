@@ -8,14 +8,19 @@ import { useActionState } from "react";
 import { label, hint, input, textarea, primaryBtn, ErrorBox } from "../../../ui";
 import {
   ENERGY_CLASSES,
-  CONDITION_STATES,
-  CONDITION_LABEL,
   sectionLabel,
   type SectionKind,
 } from "@/lib/presentations/sections";
 import { saveSection } from "./actions";
 import { RepeatableItems } from "./repeatable";
-import { AnalyticMapsFields, PanoramaFields, FloorplansFields, HeroLandPolygonFields } from "./media-editors";
+import {
+  AnalyticMapsFields,
+  PanoramaFields,
+  FloorplansFields,
+  HeroLandPolygonFields,
+  ValuationFields,
+  ConditionFields,
+} from "./media-editors";
 
 export type GalleryPhoto = {
   id: string;
@@ -63,9 +68,28 @@ export type SectionDefaults = {
   photos?: GalleryPhoto[];
   // documents
   documentsHeading?: string;
-  // repeatable (benefits/valuation/condition/poi/social/news)
+  // repeatable (benefits/poi/social/news)
   heading?: string;
   items?: Record<string, string>[];
+  // valuation (screenshoty) + technický stav (foto + dokument)
+  valuationItems?: {
+    source: string;
+    url: string;
+    estimate_czk: string;
+    min_czk: string;
+    max_czk: string;
+    note: string;
+    image_path: string;
+  }[];
+  conditionItems?: {
+    category: string;
+    condition: string;
+    description: string;
+    image_path: string;
+    document_id: string;
+  }[];
+  /** Už nahrané dokumenty (výběr u položek tech. stavu). */
+  documentChoices?: { id: string; name: string }[];
   // obrázkové sekce (kolo 2/3)
   mapsItems?: { title: string; caption: string; group: string; why: string; image_path: string }[];
   panorama?: {
@@ -140,8 +164,25 @@ export function SectionEditor({
       {kind === "contact" ? <ContactFields presentationId={presentationId} defaults={defaults} /> : null}
       {kind === "gallery" ? <GalleryFields presentationId={presentationId} defaults={defaults} /> : null}
       {kind === "benefits" ? <BenefitsFields defaults={defaults} /> : null}
-      {kind === "valuation" ? <ValuationFields defaults={defaults} /> : null}
-      {kind === "technicalCondition" ? <ConditionFields defaults={defaults} /> : null}
+      {kind === "valuation" ? (
+        <ValuationFields
+          presentationId={presentationId}
+          userId={userId}
+          heading={defaults.heading ?? ""}
+          initialItems={defaults.valuationItems ?? []}
+          mediaUrls={defaults.mediaUrls ?? {}}
+        />
+      ) : null}
+      {kind === "technicalCondition" ? (
+        <ConditionFields
+          presentationId={presentationId}
+          userId={userId}
+          heading={defaults.heading ?? ""}
+          initialItems={defaults.conditionItems ?? []}
+          mediaUrls={defaults.mediaUrls ?? {}}
+          documentChoices={defaults.documentChoices ?? []}
+        />
+      ) : null}
       {kind === "poi" ? <PoiFields defaults={defaults} /> : null}
       {kind === "socialProof" ? <SocialFields defaults={defaults} /> : null}
       {kind === "news" ? <NewsFields defaults={defaults} /> : null}
@@ -486,58 +527,6 @@ function BenefitsFields({ defaults }: { defaults: SectionDefaults }) {
           { key: "icon", label: "Ikona (emoji, nepovinné)", type: "text", placeholder: "např. 🌳" },
           { key: "heading", label: "Nadpis dlaždice", type: "text", placeholder: "např. Klidná ulice" },
           { key: "body", label: "Popis (nepovinné)", type: "textarea", placeholder: "Krátký popis…" },
-        ]}
-      />
-    </>
-  );
-}
-
-function ValuationFields({ defaults }: { defaults: SectionDefaults }) {
-  return (
-    <>
-      <label style={label}>
-        Nadpis sekce
-        <input style={input} type="text" name="heading" maxLength={200} placeholder="např. Nezávislé odhady ceny" defaultValue={defaults.heading ?? ""} />
-      </label>
-      <RepeatableItems
-        name="items_json"
-        addLabel="Přidat odhad"
-        initial={defaults.items ?? []}
-        emptyHint="Zatím žádný odhad. Přidej ho tlačítkem níže."
-        fields={[
-          { key: "source", label: "Zdroj", type: "text", placeholder: "např. Reas, Bezrealitky…" },
-          { key: "url", label: "Odkaz (nepovinné)", type: "text", placeholder: "https://…" },
-          { key: "estimate_czk", label: "Odhad (Kč)", type: "number", placeholder: "např. 8900000" },
-          { key: "min_czk", label: "Od (Kč, nepovinné)", type: "number", placeholder: "např. 8500000" },
-          { key: "max_czk", label: "Do (Kč, nepovinné)", type: "number", placeholder: "např. 9300000" },
-          { key: "note", label: "Poznámka (nepovinné)", type: "text", placeholder: "krátká poznámka" },
-        ]}
-      />
-    </>
-  );
-}
-
-function ConditionFields({ defaults }: { defaults: SectionDefaults }) {
-  return (
-    <>
-      <label style={label}>
-        Nadpis sekce
-        <input style={input} type="text" name="heading" maxLength={200} placeholder="např. Technický stav" defaultValue={defaults.heading ?? ""} />
-      </label>
-      <RepeatableItems
-        name="items_json"
-        addLabel="Přidat položku"
-        initial={defaults.items ?? []}
-        emptyHint="Zatím žádná položka. Přidej ji tlačítkem níže."
-        fields={[
-          { key: "category", label: "Co (kategorie)", type: "text", placeholder: "např. Střecha" },
-          {
-            key: "condition",
-            label: "Stav",
-            type: "select",
-            options: CONDITION_STATES.map((c) => ({ value: c, label: CONDITION_LABEL[c] })),
-          },
-          { key: "description", label: "Popis (nepovinné)", type: "textarea", placeholder: "např. Nová krytina 2021" },
         ]}
       />
     </>

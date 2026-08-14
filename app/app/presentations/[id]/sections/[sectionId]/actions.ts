@@ -144,9 +144,9 @@ async function applyKind(
     case "benefits":
       return saveBenefits(supabase, s, formData);
     case "valuation":
-      return saveValuation(supabase, s, formData);
+      return saveValuation(supabase, s, formData, userId);
     case "technicalCondition":
-      return saveCondition(supabase, s, formData);
+      return saveCondition(supabase, s, formData, userId);
     case "poi":
       return savePoi(supabase, s, formData);
     case "socialProof":
@@ -427,6 +427,7 @@ async function saveValuation(
   supabase: Awaited<ReturnType<typeof createClient>>,
   s: LoadedSection,
   formData: FormData,
+  userId: string,
 ): Promise<ApplyResult> {
   const heading = clamp(text(formData, "heading"), 200);
   const items = parseJsonArray(formData, "items_json")
@@ -450,10 +451,19 @@ async function saveValuation(
         min_czk: toNum(it.min_czk),
         max_czk: toNum(it.max_czk),
         note: typeof it.note === "string" ? it.note.trim().slice(0, 300) || undefined : undefined,
+        // Screenshot z cizí kalkulačky. Cesta se ověří (tvar + vlastnictví);
+        // na registraci do presentation_media stojí veřejné čtení obrázku.
+        image_path: keepMediaPath(it.image_path, userId, s.presentation_id),
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null)
     .slice(0, 20);
+
+  const paths = items
+    .map((it) => it.image_path)
+    .filter((x): x is string => typeof x === "string" && x.length > 0);
+  const sync = await syncMedia(supabase, s.presentation_id, s.id, paths);
+  if (!sync.ok) return sync;
 
   return writeContent(supabase, s.id, { heading: heading ?? undefined, items });
 }
@@ -463,22 +473,65 @@ async function saveCondition(
   supabase: Awaited<ReturnType<typeof createClient>>,
   s: LoadedSection,
   formData: FormData,
+  userId: string,
 ): Promise<ApplyResult> {
   const heading = clamp(text(formData, "heading"), 200);
-  const items = parseJsonArray(formData, "items_json")
-    .map((raw) => {
-      const it = (raw ?? {}) as Record<string, unknown>;
+  const raw = parseJsonArray(formData, "items_json")
+    .map((r) => {
+      const it = (r ?? {}) as Record<string, unknown>;
       const cat = typeof it.category === "string" ? it.category.trim() : "";
       if (!cat) return null;
+      const documentId =
+        typeof it.document_id === "string" && isUuid(it.document_id.trim())
+          ? it.document_id.trim()
+          : undefined;
       return {
         category: cat.slice(0, 120),
         condition: isConditionState(it.condition) ? it.condition : undefined,
         description:
           typeof it.description === "string" ? it.description.trim().slice(0, 600) || undefined : undefined,
+        // Fotka položky (media bucket) — ověří tvar + vlastnictví; registruje se do médií.
+        image_path: keepMediaPath(it.image_path, userId, s.presentation_id),
+        document_id: documentId,
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null)
     .slice(0, 30);
+
+  // Přijmi jen document_id, které opravdu patří k dokumentům TÉTO prezentace
+  // (jinak by šlo do JSONB propašovat cizí id). RLS `documents owner all`
+  // stejně pustí jen vlastníkovy řádky — tohle je navíc kontrola konzistence.
+  const wantedDocIds = Array.from(
+    new Set(raw.map((it) => it.document_id).filter((x): x is string => typeof x === "string")),
+  );
+  let validDocIds = new Set<string>();
+  if (wantedDocIds.length > 0) {
+    const { data: docRows, error: docErr } = await supabase
+      .from("presentation_documents")
+      .select("id")
+      .eq("presentation_id", s.presentation_id)
+      .in("id", wantedDocIds);
+    if (docErr) {
+      console.error("[sections/edit] tech. stav: ověření dokumentů selhalo:", docErr.message);
+      if (isMissingSchemaError(docErr)) return { ok: false, message: SCHEMA_ERROR };
+      return { ok: false, message: "Uložení se nepovedlo, zkus to prosím znovu." };
+    }
+    validDocIds = new Set((docRows ?? []).map((d) => d.id));
+  }
+
+  const items = raw.map((it) => ({
+    category: it.category,
+    condition: it.condition,
+    description: it.description,
+    image_path: it.image_path,
+    document_id: it.document_id && validDocIds.has(it.document_id) ? it.document_id : undefined,
+  }));
+
+  const paths = items
+    .map((it) => it.image_path)
+    .filter((x): x is string => typeof x === "string" && x.length > 0);
+  const sync = await syncMedia(supabase, s.presentation_id, s.id, paths);
+  if (!sync.ok) return sync;
 
   return writeContent(supabase, s.id, { heading: heading ?? undefined, items });
 }
